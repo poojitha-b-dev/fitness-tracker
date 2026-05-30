@@ -1,0 +1,270 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ═══════════════════════════════════════════════════════════════
+   FITTRACKER — DARK EMERALD THEME
+   Overrides Tailwind's light defaults across every component
+   without touching any .tsx file
+═══════════════════════════════════════════════════════════════ */
+
+@import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500&display=swap');
+
+/* ── Base ───────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; }
+
+html, body, #root {
+  min-height: 100vh;
+  background: #050a0e;
+  color: #e5e7eb;
+  font-family: 'DM Sans', sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── Scrollbar ──────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(16,185,129,0.25); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(16,185,129,0.45); }
+
+/* ══════════════════════════════════════════════════════════════
+   TEXT COLORS
+══════════════════════════════════════════════════════════════ */
+.text-gray-900  { color: #ecfdf5 !important; }
+.text-gray-800  { color: #d1fae5 !important; }
+.text-gray-700  { color: #d1d5db !important; }
+.text-gray-600  { color: #9ca3af !important; }
+.text-gray-500  { color: #6b7280 !important; }
+.text-gray-400  { color: #4b5563 !important; }
+.text-gray-300  { color: rgba(52,211,153,0.25) !important; }
+
+.text-green-800 { color: #6ee7b7 !important; }
+.text-green-700 { color: #34d399 !important; }
+.text-green-600 { color: #34d399 !important; }
+.text-blue-800  { color: #93c5fd !important; }
+.text-blue-700  { color: #7dd3fc !important; }
+.text-blue-600  { color: #60a5fa !important; }
+.text-purple-800{ color: #c4b5fd !important; }
+.text-purple-700{ color: #a78bfa !important; }
+.text-cyan-700  { color: #22d3ee !important; }
+.text-orange-600{ color: #fb923c !important; }
+.text-yellow-600{ color: #fbbf24 !important; }
+.text-red-600   { color: #f87171 !important; }
+.text-red-700   { color: #ef4444 !important; }
+.text-emerald-600 { color: #34d399 !important; }
+.text-emerald-700 { color: #10b981 !important; }
+
+.text-green-800.line-through { opacity: 0.55; }
+
+/* ══════════════════════════════════════════════════════════════
+   BACKGROUNDS
+══════════════════════════════════════════════════════════════ */
+.bg-white {
+  background: rgba(13, 20, 16, 0.88) !important;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+.bg-gray-50  { background: rgba(255,255,255,0.035) !important; }
+.bg-gray-100 { background: rgba(255,255,255,0.055) !important; }
+.bg-gray-200 { background: rgba(255,255,255,0.08)  !important; }
+
+.hover\:bg-gray-50:hover  { background: rgba(255,255,255,0.055) !important; }
+.hover\:bg-gray-100:hover { background: rgba(255,255,255,0.07)  !important; }
+.hover\:bg-gray-200:hover { background: rgba(255,255,255,0.1)   !important; }
+
+/* Tip panels */
+.bg-green-50  { background: rgba(16,185,129,0.07)  !important; }
+.bg-blue-50   { background: rgba(96,165,250,0.07)  !important; }
+.bg-purple-50 { background: rgba(139,92,246,0.07)  !important; }
+.bg-yellow-50 { background: rgba(251,191,36,0.07)   !important; }
+.bg-red-50    { background: rgba(248,113,113,0.07)  !important; }
+
+/* Badges */
+.bg-emerald-100 { background: rgba(16,185,129,0.12) !important; }
+.bg-cyan-100    { background: rgba(6,182,212,0.12)  !important; }
+.bg-blue-100    { background: rgba(96,165,250,0.12) !important; }
+.bg-orange-100  { background: rgba(249,115,22,0.12) !important; }
+.bg-red-100     { background: rgba(239,68,68,0.12)  !important; }
+.bg-yellow-100  { background: rgba(245,158,11,0.12) !important; }
+.bg-green-100   { background: rgba(16,185,129,0.12) !important; }
+
+.hover\:bg-cyan-200:hover    { background: rgba(6,182,212,0.2)  !important; }
+.hover\:bg-emerald-200:hover { background: rgba(16,185,129,0.2) !important; }
+
+/* Goal card coloured borders */
+.bg-green-50.rounded-xl  { background: rgba(16,185,129,0.05) !important; }
+.bg-red-50.rounded-xl    { background: rgba(239,68,68,0.05)  !important; }
+
+/* Page background */
+.min-h-screen.bg-gray-950,
+.bg-gray-950 { background: #050a0e !important; }
+
+/* ══════════════════════════════════════════════════════════════
+   BORDERS
+══════════════════════════════════════════════════════════════ */
+.border-gray-100 { border-color: rgba(255,255,255,0.06) !important; }
+.border-gray-200 { border-color: rgba(255,255,255,0.08) !important; }
+.border-gray-300 { border-color: rgba(255,255,255,0.12) !important; }
+
+.border-green-500  { border-color: rgba(16,185,129,0.35)  !important; }
+.border-green-200  { border-color: rgba(52,211,153,0.2)   !important; }
+.border-blue-200   { border-color: rgba(96,165,250,0.2)   !important; }
+.border-yellow-200 { border-color: rgba(251,191,36,0.2)   !important; }
+.border-red-300    { border-color: rgba(248,113,113,0.25) !important; }
+.border-red-200    { border-color: rgba(248,113,113,0.2)  !important; }
+
+.border-b.border-gray-200 { border-color: rgba(52,211,153,0.1) !important; }
+.border-t.border-gray-200 { border-color: rgba(52,211,153,0.08) !important; }
+
+/* ══════════════════════════════════════════════════════════════
+   SHADOWS
+══════════════════════════════════════════════════════════════ */
+.shadow-sm {
+  box-shadow: 0 2px 12px rgba(0,0,0,0.45), 0 0 0 1px rgba(52,211,153,0.05) !important;
+}
+.shadow {
+  box-shadow: 0 4px 20px rgba(0,0,0,0.5), 0 0 0 1px rgba(52,211,153,0.06) !important;
+}
+.shadow-md {
+  box-shadow: 0 8px 32px rgba(0,0,0,0.55), 0 0 0 1px rgba(52,211,153,0.07) !important;
+}
+.hover\:shadow-md:hover {
+  box-shadow: 0 8px 32px rgba(0,0,0,0.55), 0 0 0 1px rgba(52,211,153,0.15), 0 0 28px rgba(16,185,129,0.07) !important;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   CARDS — add emerald border glow
+══════════════════════════════════════════════════════════════ */
+.bg-white.rounded-xl,
+.bg-white.rounded-lg {
+  border: 1px solid rgba(52,211,153,0.08) !important;
+  transition: box-shadow 0.2s, border-color 0.2s;
+}
+.bg-white.rounded-xl:hover,
+.bg-white.rounded-lg:hover {
+  border-color: rgba(52,211,153,0.15) !important;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   INPUTS / TEXTAREAS / SELECTS
+══════════════════════════════════════════════════════════════ */
+input,
+textarea,
+select {
+  background: rgba(255,255,255,0.05) !important;
+  color: #e5e7eb !important;
+  border-color: rgba(255,255,255,0.1) !important;
+  transition: border-color 0.2s, box-shadow 0.2s, background 0.2s;
+}
+
+input::placeholder,
+textarea::placeholder { color: #4b5563 !important; }
+
+input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(0.6); cursor: pointer; }
+
+input:focus,
+textarea:focus,
+select:focus {
+  border-color: rgba(52,211,153,0.45) !important;
+  box-shadow: 0 0 0 3px rgba(16,185,129,0.12) !important;
+  background: rgba(255,255,255,0.08) !important;
+  outline: none !important;
+}
+
+.focus\:ring-2:focus { --tw-ring-shadow: none; }
+.focus\:border-emerald-500:focus { border-color: rgba(52,211,153,0.45) !important; }
+
+select option { background: #0d1410; color: #e5e7eb; }
+
+/* ══════════════════════════════════════════════════════════════
+   TAB PILL SWITCHER (Goals filter: bg-gray-100 container)
+══════════════════════════════════════════════════════════════ */
+.bg-gray-100.p-1.rounded-lg {
+  background: rgba(255,255,255,0.05) !important;
+  border: 1px solid rgba(255,255,255,0.07);
+}
+.bg-gray-100.p-1.rounded-lg .bg-white {
+  background: rgba(16,185,129,0.14) !important;
+  color: #34d399 !important;
+  box-shadow: none !important;
+  border: 1px solid rgba(52,211,153,0.2) !important;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   BUTTONS — secondary / outline / cancel
+══════════════════════════════════════════════════════════════ */
+button.border.border-gray-300,
+a.border.border-gray-300 {
+  color: #9ca3af !important;
+  border-color: rgba(255,255,255,0.12) !important;
+  background: transparent !important;
+}
+button.border.border-gray-300:hover {
+  background: rgba(255,255,255,0.06) !important;
+  color: #d1d5db !important;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   HOVER ICON COLORS
+══════════════════════════════════════════════════════════════ */
+.hover\:text-gray-600:hover   { color: #9ca3af !important; }
+.hover\:text-gray-900:hover   { color: #ecfdf5 !important; }
+.hover\:text-emerald-600:hover{ color: #34d399 !important; }
+.hover\:text-emerald-700:hover{ color: #10b981 !important; }
+.hover\:text-red-600:hover    { color: #f87171 !important; }
+.hover\:text-red-700:hover    { color: #ef4444 !important; }
+
+/* ══════════════════════════════════════════════════════════════
+   NAV ACTIVE TAB LINE (Nutrition tabs: border-b-2)
+══════════════════════════════════════════════════════════════ */
+.border-b-2.border-emerald-500 { border-color: #10b981 !important; }
+.border-b-2.border-transparent  { border-color: transparent !important; }
+
+/* ══════════════════════════════════════════════════════════════
+   ACTIVITY ICON BUBBLES (dashboard recent activity)
+══════════════════════════════════════════════════════════════ */
+.bg-emerald-100.rounded-lg { background: rgba(16,185,129,0.12) !important; }
+.bg-orange-100.rounded-lg  { background: rgba(249,115,22,0.12)  !important; }
+.bg-blue-100.rounded-lg    { background: rgba(59,130,246,0.12)  !important; }
+
+/* ══════════════════════════════════════════════════════════════
+   WORKOUT SET BADGE (bg-white px-3 py-1 rounded-md)
+══════════════════════════════════════════════════════════════ */
+span.bg-white.px-3,
+.bg-white.px-3.py-1.rounded-md {
+  background: rgba(255,255,255,0.07) !important;
+  color: #d1d5db !important;
+  border: 1px solid rgba(255,255,255,0.08) !important;
+  backdrop-filter: none !important;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   EMPTY STATE ICONS
+══════════════════════════════════════════════════════════════ */
+.w-16.h-16.text-gray-300 { color: rgba(52,211,153,0.2) !important; }
+
+/* ══════════════════════════════════════════════════════════════
+   ANIMATIONS
+══════════════════════════════════════════════════════════════ */
+.bg-white.rounded-xl,
+.bg-white.rounded-lg {
+  animation: cardIn 0.22s ease both;
+}
+@keyframes cardIn {
+  from { opacity: 0; transform: translateY(5px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.max-w-7xl.mx-auto.px-4.sm\:px-6.lg\:px-8.py-8 {
+  animation: pageIn 0.28s ease both;
+}
+@keyframes pageIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ══════════════════════════════════════════════════════════════
+   AUTH PAGE — keep its own scoped dark styles intact
+══════════════════════════════════════════════════════════════ */
+.auth-root .bg-white { background: rgba(15,23,20,0.7) !important; backdrop-filter: blur(24px) !important; }
