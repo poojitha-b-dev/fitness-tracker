@@ -1,17 +1,19 @@
 // src/components/HealthMetrics.tsx
+// Fixes: #15 (broken 2-digit inputs), #16 (default 0 inputs)
 import React, { useState, useEffect } from 'react';
 import {
-  Plus, Save, Calendar, Heart, Scale, Activity,
-  Moon, Zap, AlertCircle, Edit, Trash2
+  Plus, Save, Calendar, Heart, Scale,
+  Activity, Moon, Zap, AlertCircle, Edit, Trash2, X,
 } from 'lucide-react';
 import { storage } from '../utils/storage';
 import { HealthMetric } from '../types';
 import { formatDate, calculateBMI, getBMICategory } from '../utils/calculations';
+import NumericInput from './NumericInput';
 
 const HealthMetrics: React.FC = () => {
   const [metrics, setMetrics] = useState<HealthMetric[]>([]);
   const [isAdding, setIsAdding] = useState(false);
-  const [editing, setEditing] = useState<HealthMetric | null>(null);
+  const [editing, setEditing]   = useState<HealthMetric | null>(null);
 
   useEffect(() => { setMetrics(storage.getHealthMetrics()); }, []);
 
@@ -29,7 +31,7 @@ const HealthMetrics: React.FC = () => {
   };
 
   const latest = metrics[0];
-  const user = storage.getUser() as any;
+  const user   = storage.getUser() as any;
 
   if (isAdding || editing) {
     return (
@@ -54,7 +56,7 @@ const HealthMetrics: React.FC = () => {
         </button>
       </div>
 
-      {/* Latest overview cards */}
+      {/* Latest overview */}
       {latest && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
           {latest.weight && (
@@ -69,7 +71,7 @@ const HealthMetrics: React.FC = () => {
           )}
           {latest.restingHeartRate && (
             <MetricCard icon={Activity} title="Resting HR"
-              value={`${latest.restingHeartRate}`} subtitle="bpm"
+              value={`${latest.restingHeartRate} bpm`} subtitle="beats per minute"
               color="bg-pink-500" date={latest.date} />
           )}
           {latest.sleepHours && (
@@ -103,17 +105,16 @@ const HealthMetrics: React.FC = () => {
                 description={`${latest.sleepHours} hours of sleep`}
                 type={latest.sleepHours >= 7 && latest.sleepHours <= 9 ? 'success' : 'warning'} />
             )}
-            {!latest && (
-              <p className="text-gray-500 text-sm">Record your first metrics to see insights here.</p>
-            )}
+            {!latest && <p className="text-gray-500 text-sm">Record your first metrics to see insights here.</p>}
           </div>
         </div>
+
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
           <h3 className="text-lg font-semibold text-gray-900 mb-4">Health Tips</h3>
           <div className="space-y-3">
-            <TipCard color="green" title="Regular Monitoring" text="Track your metrics weekly to identify trends and make informed health decisions." />
-            <TipCard color="blue" title="Blood Pressure" text="Normal BP is less than 120/80 mmHg. Consider lifestyle changes if consistently elevated." />
-            <TipCard color="purple" title="Sleep Quality" text="Aim for 7-9 hours of quality sleep each night for optimal health and recovery." />
+            <TipCard color="green"  title="Regular Monitoring"  text="Track your metrics weekly to identify trends and make informed health decisions." />
+            <TipCard color="blue"   title="Blood Pressure"      text="Normal BP is less than 120/80 mmHg. Lifestyle changes help if consistently elevated." />
+            <TipCard color="purple" title="Sleep Quality"       text="Aim for 7–9 hours of quality sleep each night for optimal health and recovery." />
           </div>
         </div>
       </div>
@@ -143,7 +144,118 @@ const HealthMetrics: React.FC = () => {
   );
 };
 
-// ─── Sub-components ───────────────────────────────────────────────────────────
+// ─── MetricForm ───────────────────────────────────────────────────────────────
+// Fix #15 + #16: use NumericInput for every number field — no broken 2-digit inputs
+const MetricForm: React.FC<{
+  metric?: HealthMetric | null;
+  onSave: (m: HealthMetric) => void;
+  onCancel: () => void;
+}> = ({ metric, onSave, onCancel }) => {
+  const [date,            setDate]            = useState(metric?.date                          || formatDate(new Date()));
+  const [weight,          setWeight]          = useState(metric?.weight                        ?? 0);
+  const [bodyFat,         setBodyFat]         = useState(metric?.bodyFat                       ?? 0);
+  const [muscleMass,      setMuscleMass]      = useState(metric?.muscleMass                    ?? 0);
+  const [systolic,        setSystolic]        = useState(metric?.bloodPressure?.systolic       ?? 0);
+  const [diastolic,       setDiastolic]       = useState(metric?.bloodPressure?.diastolic      ?? 0);
+  const [heartRate,       setHeartRate]       = useState(metric?.restingHeartRate              ?? 0);
+  const [sleepHours,      setSleepHours]      = useState(metric?.sleepHours                   ?? 0);
+  const [stressLevel,     setStressLevel]     = useState(metric?.stressLevel                  ?? 0);
+  const [energy,          setEnergy]          = useState(metric?.energy                        ?? 0);
+  const [notes,           setNotes]           = useState(metric?.notes                        || '');
+
+  const cls = "w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500";
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const data: HealthMetric = {
+      id:   metric?.id || Date.now().toString(),
+      date,
+      ...(weight      > 0 && { weight }),
+      ...(bodyFat     > 0 && { bodyFat }),
+      ...(muscleMass  > 0 && { muscleMass }),
+      ...(systolic    > 0 && diastolic > 0 && { bloodPressure: { systolic, diastolic } }),
+      ...(heartRate   > 0 && { restingHeartRate: heartRate }),
+      ...(sleepHours  > 0 && { sleepHours }),
+      ...(stressLevel > 0 && { stressLevel }),
+      ...(energy      > 0 && { energy }),
+      ...(notes.trim()    && { notes }),
+    };
+    onSave(data);
+  };
+
+  return (
+    <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+        <div className="flex items-center justify-between mb-6">
+          <h2 className="text-2xl font-bold text-gray-900">{metric ? 'Edit Health Metrics' : 'Record Health Metrics'}</h2>
+          <button type="button" onClick={onCancel} className="text-gray-400 hover:text-gray-600"><X className="w-6 h-6" /></button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-6">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Date</label>
+            <input type="date" required value={date} max={formatDate(new Date())}
+              onChange={e => setDate(e.target.value)} className={cls} />
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <Field label="Weight (kg)">
+              <NumericInput value={weight} min={0} max={500} step={0.1} placeholder="e.g. 72.5" onChange={setWeight} className={cls} />
+            </Field>
+            <Field label="Body Fat (%)">
+              <NumericInput value={bodyFat} min={0} max={100} step={0.1} placeholder="e.g. 18" onChange={setBodyFat} className={cls} />
+            </Field>
+            <Field label="Muscle Mass (kg)">
+              <NumericInput value={muscleMass} min={0} max={200} step={0.1} placeholder="e.g. 55" onChange={setMuscleMass} className={cls} />
+            </Field>
+            <Field label="Systolic BP (mmHg)">
+              <NumericInput value={systolic} min={0} max={300} placeholder="e.g. 120" onChange={setSystolic} className={cls} />
+            </Field>
+            <Field label="Diastolic BP (mmHg)">
+              <NumericInput value={diastolic} min={0} max={200} placeholder="e.g. 80" onChange={setDiastolic} className={cls} />
+            </Field>
+            <Field label="Resting Heart Rate (bpm)">
+              <NumericInput value={heartRate} min={0} max={250} placeholder="e.g. 65" onChange={setHeartRate} className={cls} />
+            </Field>
+            <Field label="Sleep Hours">
+              <NumericInput value={sleepHours} min={0} max={24} step={0.5} placeholder="e.g. 7.5" onChange={setSleepHours} className={cls} />
+            </Field>
+            <Field label="Stress Level (1–10)">
+              <NumericInput value={stressLevel} min={1} max={10} placeholder="e.g. 4" onChange={setStressLevel} className={cls} />
+            </Field>
+            <Field label="Energy Level (1–10)">
+              <NumericInput value={energy} min={1} max={10} placeholder="e.g. 7" onChange={setEnergy} className={cls} />
+            </Field>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Notes (optional)</label>
+            <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={3} className={cls}
+              placeholder="Any additional notes about your health today…" />
+          </div>
+
+          <div className="flex justify-end space-x-4">
+            <button type="button" onClick={onCancel}
+              className="px-6 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors duration-200">Cancel</button>
+            <button type="submit"
+              className="px-6 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-colors duration-200 flex items-center space-x-2">
+              <Save className="w-4 h-4" /><span>Save Metrics</span>
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+};
+
+// ─── Small helpers ────────────────────────────────────────────────────────────
+const Field: React.FC<{ label: string; children: React.ReactNode }> = ({ label, children }) => (
+  <div>
+    <label className="block text-sm font-medium text-gray-700 mb-2">{label}</label>
+    {children}
+  </div>
+);
+
 const MetricCard: React.FC<{ icon: React.ComponentType<any>; title: string; value: string; subtitle?: string; color: string; date: string }> =
   ({ icon: Icon, title, value, subtitle, color, date }) => (
   <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
@@ -155,22 +267,19 @@ const MetricCard: React.FC<{ icon: React.ComponentType<any>; title: string; valu
       </div>
       <div className={`p-3 rounded-lg ${color}`}><Icon className="w-6 h-6 text-white" /></div>
     </div>
-    <p className="text-xs text-gray-400">Last updated: {new Date(date).toLocaleDateString()}</p>
+    <p className="text-xs text-gray-400">Updated: {new Date(date).toLocaleDateString()}</p>
   </div>
 );
 
-const InsightCard: React.FC<{ icon: React.ComponentType<any>; title: string; value: string; description: string; type: 'success' | 'warning' | 'danger' }> =
-  ({ icon: Icon, title, value, description, type }) => {
-  const colors = { success: 'bg-green-50 text-green-800 border-green-200', warning: 'bg-yellow-50 text-yellow-800 border-yellow-200', danger: 'bg-red-50 text-red-800 border-red-200' };
-  return (
-    <div className={`p-4 rounded-lg border ${colors[type]}`}>
-      <div className="flex items-start space-x-3">
-        <Icon className="w-5 h-5 mt-0.5" />
-        <div><h4 className="font-medium mb-1">{title}</h4><p className="font-semibold">{value}</p><p className="text-sm opacity-75 mt-1">{description}</p></div>
-      </div>
+const InsightCard: React.FC<{ icon: React.ComponentType<any>; title: string; value: string; description: string; type: 'success' | 'warning' }> =
+  ({ icon: Icon, title, value, description, type }) => (
+  <div className={`p-4 rounded-lg border ${type === 'success' ? 'bg-green-50 text-green-800 border-green-200' : 'bg-yellow-50 text-yellow-800 border-yellow-200'}`}>
+    <div className="flex items-start space-x-3">
+      <Icon className="w-5 h-5 mt-0.5" />
+      <div><h4 className="font-medium mb-1">{title}</h4><p className="font-semibold">{value}</p><p className="text-sm opacity-75 mt-1">{description}</p></div>
     </div>
-  );
-};
+  </div>
+);
 
 const TipCard: React.FC<{ color: string; title: string; text: string }> = ({ color, title, text }) => (
   <div className={`p-4 bg-${color}-50 rounded-lg`}>
@@ -188,123 +297,34 @@ const MetricHistoryCard: React.FC<{ metric: HealthMetric; onEdit: (m: HealthMetr
         <span className="font-medium text-gray-900">{new Date(metric.date).toLocaleDateString()}</span>
       </div>
       <div className="flex items-center space-x-2">
-        <button onClick={() => onEdit(metric)} className="p-1 text-gray-400 hover:text-emerald-600 transition-colors duration-200"><Edit className="w-4 h-4" /></button>
-        <button onClick={() => onDelete(metric.id)} className="p-1 text-gray-400 hover:text-red-600 transition-colors duration-200"><Trash2 className="w-4 h-4" /></button>
+        <button onClick={() => onEdit(metric)} className="p-1 text-gray-400 hover:text-emerald-600 transition-colors"><Edit className="w-4 h-4" /></button>
+        <button onClick={() => onDelete(metric.id)} className="p-1 text-gray-400 hover:text-red-600 transition-colors"><Trash2 className="w-4 h-4" /></button>
       </div>
     </div>
     <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
-      {metric.weight && <MiniStat icon={Scale} label="Weight" value={`${metric.weight} kg`} />}
-      {metric.bloodPressure && <MiniStat icon={Heart} label="BP" value={`${metric.bloodPressure.systolic}/${metric.bloodPressure.diastolic}`} />}
-      {metric.restingHeartRate && <MiniStat icon={Activity} label="Resting HR" value={`${metric.restingHeartRate} bpm`} />}
-      {metric.sleepHours && <MiniStat icon={Moon} label="Sleep" value={`${metric.sleepHours} hrs`} />}
-      {metric.stressLevel && <MiniStat icon={AlertCircle} label="Stress" value={`${metric.stressLevel}/10`} />}
-      {metric.energy && <MiniStat icon={Zap} label="Energy" value={`${metric.energy}/10`} />}
+      {metric.weight           && <MiniStat icon={Scale}     label="Weight"    value={`${metric.weight} kg`} />}
+      {metric.bloodPressure    && <MiniStat icon={Heart}     label="BP"        value={`${metric.bloodPressure.systolic}/${metric.bloodPressure.diastolic}`} />}
+      {metric.restingHeartRate && <MiniStat icon={Activity}  label="HR"        value={`${metric.restingHeartRate} bpm`} />}
+      {metric.sleepHours       && <MiniStat icon={Moon}      label="Sleep"     value={`${metric.sleepHours} hrs`} />}
+      {metric.stressLevel      && <MiniStat icon={AlertCircle} label="Stress"  value={`${metric.stressLevel}/10`} />}
+      {metric.energy           && <MiniStat icon={Zap}       label="Energy"    value={`${metric.energy}/10`} />}
     </div>
     {metric.notes && <div className="mt-3 p-3 bg-blue-50 rounded-lg"><p className="text-sm text-blue-800">{metric.notes}</p></div>}
   </div>
 );
 
-const MiniStat: React.FC<{ icon: React.ComponentType<any>; label: string; value: string }> = ({ icon: Icon, label, value }) => (
+const MiniStat: React.FC<{ icon: React.ComponentType<any>; label: string; value: string }> =
+  ({ icon: Icon, label, value }) => (
   <div className="text-center p-2 bg-gray-50 rounded">
     <Icon className="w-4 h-4 text-gray-600 mx-auto mb-1" />
-    <p className="text-sm font-medium">{value}</p>
+    <p className="text-sm font-medium text-gray-900">{value}</p>
     <p className="text-xs text-gray-500">{label}</p>
   </div>
 );
 
-const MetricForm: React.FC<{ metric?: HealthMetric | null; onSave: (m: HealthMetric) => void; onCancel: () => void }> =
-  ({ metric, onSave, onCancel }) => {
-  const [form, setForm] = useState({
-    date: metric?.date || formatDate(new Date()),
-    weight: metric?.weight?.toString() || '',
-    bodyFat: metric?.bodyFat?.toString() || '',
-    muscleMass: metric?.muscleMass?.toString() || '',
-    systolic: metric?.bloodPressure?.systolic?.toString() || '',
-    diastolic: metric?.bloodPressure?.diastolic?.toString() || '',
-    restingHeartRate: metric?.restingHeartRate?.toString() || '',
-    sleepHours: metric?.sleepHours?.toString() || '',
-    stressLevel: metric?.stressLevel?.toString() || '',
-    energy: metric?.energy?.toString() || '',
-    notes: metric?.notes || '',
-  });
-  const set = (k: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
-    setForm(p => ({ ...p, [k]: e.target.value }));
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    const data: HealthMetric = {
-      id: metric?.id || Date.now().toString(),
-      date: form.date,
-      ...(form.weight && { weight: Number(form.weight) }),
-      ...(form.bodyFat && { bodyFat: Number(form.bodyFat) }),
-      ...(form.muscleMass && { muscleMass: Number(form.muscleMass) }),
-      ...(form.systolic && form.diastolic && { bloodPressure: { systolic: Number(form.systolic), diastolic: Number(form.diastolic) } }),
-      ...(form.restingHeartRate && { restingHeartRate: Number(form.restingHeartRate) }),
-      ...(form.sleepHours && { sleepHours: Number(form.sleepHours) }),
-      ...(form.stressLevel && { stressLevel: Number(form.stressLevel) }),
-      ...(form.energy && { energy: Number(form.energy) }),
-      ...(form.notes && { notes: form.notes }),
-    };
-    onSave(data);
-  };
-
-  const Field: React.FC<{ label: string; name: string; type?: string; min?: string; max?: string; step?: string }> =
-    ({ label, name, type = 'number', min, max, step }) => (
-    <div>
-      <label className="block text-sm font-medium text-gray-700 mb-2">{label}</label>
-      <input type={type} step={step} min={min} max={max} value={(form as any)[name]}
-        onChange={set(name)}
-        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500" />
-    </div>
-  );
-
-  return (
-    <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-        <div className="flex items-center justify-between mb-6">
-          <h2 className="text-2xl font-bold text-gray-900">{metric ? 'Edit Health Metrics' : 'Record Health Metrics'}</h2>
-          <button onClick={onCancel} className="text-gray-400 hover:text-gray-600 text-2xl leading-none">×</button>
-        </div>
-        <form onSubmit={handleSubmit} className="space-y-6">
-          <Field label="Date" name="date" type="date" />
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            <Field label="Weight (kg)" name="weight" step="0.1" min="0" />
-            <Field label="Body Fat (%)" name="bodyFat" step="0.1" min="0" max="100" />
-            <Field label="Muscle Mass (kg)" name="muscleMass" step="0.1" min="0" />
-            <Field label="Systolic BP (mmHg)" name="systolic" min="0" />
-            <Field label="Diastolic BP (mmHg)" name="diastolic" min="0" />
-            <Field label="Resting Heart Rate (bpm)" name="restingHeartRate" min="0" />
-            <Field label="Sleep Hours" name="sleepHours" step="0.5" min="0" max="24" />
-            <Field label="Stress Level (1-10)" name="stressLevel" min="1" max="10" />
-            <Field label="Energy Level (1-10)" name="energy" min="1" max="10" />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Notes (optional)</label>
-            <textarea value={form.notes} onChange={set('notes')} rows={3}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
-              placeholder="Any additional notes about your health today..." />
-          </div>
-          <div className="flex justify-end space-x-4">
-            <button type="button" onClick={onCancel}
-              className="px-6 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors duration-200">Cancel</button>
-            <button type="submit"
-              className="px-6 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-colors duration-200 flex items-center space-x-2">
-              <Save className="w-4 h-4" /><span>Save Metrics</span>
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  );
-};
-
-const getBPCategory = (s: number, d: number) => {
-  if (s < 120 && d < 80) return 'Normal';
-  if (s < 130 && d < 80) return 'Elevated';
-  if (s < 140 || d < 90) return 'High Stage 1';
-  if (s < 180 || d < 120) return 'High Stage 2';
-  return 'Hypertensive Crisis';
-};
+const getBPCategory = (s: number, d: number) =>
+  s < 120 && d < 80 ? 'Normal' : s < 130 && d < 80 ? 'Elevated' :
+  s < 140 || d < 90 ? 'High Stage 1' : s < 180 || d < 120 ? 'High Stage 2' : 'Hypertensive Crisis';
 
 const getSleepQuality = (h: number) =>
   h < 6 ? 'Insufficient' : h >= 7 && h <= 9 ? 'Optimal' : h > 9 ? 'Excessive' : 'Adequate';
