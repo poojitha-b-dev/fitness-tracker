@@ -1,63 +1,58 @@
 // src/components/Goals.tsx
+// Fix #17: description is now optional
 import React, { useState, useEffect } from 'react';
 import {
   Plus, Target, Calendar, TrendingUp, CheckCircle,
-  Circle, Edit, Trash2, Flag, Award, Clock
+  Circle, Edit, Trash2, Flag, Award, Clock, X,
 } from 'lucide-react';
 import { storage } from '../utils/storage';
 import { Goal } from '../types';
 import { formatDate } from '../utils/calculations';
+import NumericInput from './NumericInput';
 
 const Goals: React.FC = () => {
-  const [goals, setGoals] = useState<Goal[]>([]);
-  const [isAddingGoal, setIsAddingGoal] = useState(false);
-  const [editingGoal, setEditingGoal] = useState<Goal | null>(null);
-  const [filter, setFilter] = useState<'all' | 'active' | 'completed'>('all');
+  const [goals, setGoals]         = useState<Goal[]>([]);
+  const [isAdding, setIsAdding]   = useState(false);
+  const [editing, setEditing]     = useState<Goal | null>(null);
+  const [filter, setFilter]       = useState<'all' | 'active' | 'completed'>('all');
 
   useEffect(() => { setGoals(storage.getGoals()); }, []);
 
   const saveGoal = async (goal: Goal) => {
-    const updated = editingGoal
+    const updated = editing
       ? await storage.updateGoal(goal) as Goal[]
       : await storage.addGoal(goal) as Goal[];
     setGoals(updated);
-    setIsAddingGoal(false);
-    setEditingGoal(null);
+    setIsAdding(false);
+    setEditing(null);
   };
 
-  const deleteGoal = async (id: string) => {
-    setGoals(await storage.deleteGoal(id) as Goal[]);
+  const deleteGoal            = async (id: string)              => setGoals(await storage.deleteGoal(id) as Goal[]);
+  const toggleGoalCompletion  = async (id: string)              => {
+    const g = goals.find(g => g.id === id); if (!g) return;
+    setGoals(await storage.updateGoal({ ...g, completed: !g.completed }) as Goal[]);
   };
-
-  const toggleGoalCompletion = async (id: string) => {
-    const goal = goals.find(g => g.id === id);
-    if (!goal) return;
-    setGoals(await storage.updateGoal({ ...goal, completed: !goal.completed }) as Goal[]);
-  };
-
-  const updateGoalProgress = async (id: string, current: number) => {
-    const goal = goals.find(g => g.id === id);
-    if (!goal) return;
-    setGoals(await storage.updateGoal({ ...goal, current }) as Goal[]);
+  const updateGoalProgress    = async (id: string, current: number) => {
+    const g = goals.find(g => g.id === id); if (!g) return;
+    setGoals(await storage.updateGoal({ ...g, current }) as Goal[]);
   };
 
   const filteredGoals = goals.filter(g =>
     filter === 'active' ? !g.completed : filter === 'completed' ? g.completed : true
   );
-
   const stats = {
-    total: goals.length,
+    total:     goals.length,
     completed: goals.filter(g => g.completed).length,
-    active: goals.filter(g => !g.completed).length,
-    overdue: goals.filter(g => !g.completed && new Date(g.deadline) < new Date()).length,
+    active:    goals.filter(g => !g.completed).length,
+    overdue:   goals.filter(g => !g.completed && new Date(g.deadline) < new Date()).length,
   };
 
-  if (isAddingGoal || editingGoal) {
+  if (isAdding || editing) {
     return (
       <GoalForm
-        goal={editingGoal}
+        goal={editing}
         onSave={saveGoal}
-        onCancel={() => { setIsAddingGoal(false); setEditingGoal(null); }}
+        onCancel={() => { setIsAdding(false); setEditing(null); }}
       />
     );
   }
@@ -69,7 +64,7 @@ const Goals: React.FC = () => {
           <h1 className="text-3xl font-bold text-gray-900">Goals</h1>
           <p className="text-gray-600 mt-2">Set and track your fitness objectives</p>
         </div>
-        <button onClick={() => setIsAddingGoal(true)}
+        <button onClick={() => setIsAdding(true)}
           className="bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-3 rounded-lg flex items-center space-x-2 transition-colors duration-200">
           <Plus className="w-5 h-5" /><span>New Goal</span>
         </button>
@@ -102,8 +97,8 @@ const Goals: React.FC = () => {
               {filter === 'all' ? 'Start by setting your first fitness goal' : `No ${filter} goals at the moment`}
             </p>
             {filter === 'all' && (
-              <button onClick={() => setIsAddingGoal(true)}
-                className="bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-3 rounded-lg transition-colors duration-200">
+              <button onClick={() => setIsAdding(true)}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-3 rounded-lg transition-colors">
                 Set Your First Goal
               </button>
             )}
@@ -111,7 +106,7 @@ const Goals: React.FC = () => {
         ) : (
           filteredGoals.map(goal => (
             <GoalCard key={goal.id} goal={goal}
-              onEdit={setEditingGoal}
+              onEdit={setEditing}
               onDelete={deleteGoal}
               onToggleComplete={toggleGoalCompletion}
               onUpdateProgress={updateGoalProgress}
@@ -123,6 +118,7 @@ const Goals: React.FC = () => {
   );
 };
 
+// ─── StatCard ─────────────────────────────────────────────────────────────────
 const StatCard: React.FC<{ icon: React.ComponentType<any>; title: string; value: number; color: string }> =
   ({ icon: Icon, title, value, color }) => (
   <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
@@ -136,18 +132,20 @@ const StatCard: React.FC<{ icon: React.ComponentType<any>; title: string; value:
   </div>
 );
 
+// ─── GoalCard ─────────────────────────────────────────────────────────────────
 const GoalCard: React.FC<{
   goal: Goal;
   onEdit: (g: Goal) => void;
   onDelete: (id: string) => void;
   onToggleComplete: (id: string) => void;
-  onUpdateProgress: (id: string, current: number) => void;
+  onUpdateProgress: (id: string, v: number) => void;
 }> = ({ goal, onEdit, onDelete, onToggleComplete, onUpdateProgress }) => {
-  const [isUpdating, setIsUpdating] = useState(false);
+  const [isUpdating, setIsUpdating]   = useState(false);
   const [progressValue, setProgressValue] = useState(goal.current);
-  const progress  = Math.min((goal.current / goal.target) * 100, 100);
+  const progress  = goal.target > 0 ? Math.min((goal.current / goal.target) * 100, 100) : 0;
   const isOverdue = !goal.completed && new Date(goal.deadline) < new Date();
   const daysLeft  = Math.ceil((new Date(goal.deadline).getTime() - Date.now()) / 86400000);
+
   const priorityColor = (p: string) =>
     p === 'high' ? 'text-red-600 bg-red-100' : p === 'medium' ? 'text-yellow-600 bg-yellow-100' : 'text-green-600 bg-green-100';
   const TypeIcon = goal.type === 'strength' ? Award : goal.type === 'endurance' ? TrendingUp : goal.type === 'custom' ? Flag : Target;
@@ -157,67 +155,71 @@ const GoalCard: React.FC<{
       goal.completed ? 'border-green-200 bg-green-50' : isOverdue ? 'border-red-200 bg-red-50' : 'border-gray-100'
     }`}>
       <div className="flex items-start justify-between mb-4">
-        <div className="flex items-start space-x-3">
+        <div className="flex items-start space-x-3 flex-1 min-w-0">
           <button onClick={() => onToggleComplete(goal.id)}
-            className={`mt-1 transition-colors duration-200 ${goal.completed ? 'text-green-600' : 'text-gray-400 hover:text-green-600'}`}>
+            className={`mt-1 flex-shrink-0 transition-colors ${goal.completed ? 'text-green-600' : 'text-gray-400 hover:text-green-600'}`}>
             {goal.completed ? <CheckCircle className="w-6 h-6" /> : <Circle className="w-6 h-6" />}
           </button>
-          <div className="flex-1">
-            <div className="flex items-center space-x-2 mb-2">
-              <TypeIcon className="w-5 h-5 text-gray-600" />
+          <div className="flex-1 min-w-0">
+            <div className="flex flex-wrap items-center gap-2 mb-1">
+              <TypeIcon className="w-4 h-4 text-gray-500 flex-shrink-0" />
               <h3 className={`text-lg font-semibold ${goal.completed ? 'text-green-800 line-through' : 'text-gray-900'}`}>
                 {goal.title}
               </h3>
-              <span className={`px-2 py-1 rounded-full text-xs font-medium capitalize ${priorityColor(goal.priority || 'medium')}`}>
+              <span className={`px-2 py-0.5 rounded-full text-xs font-medium capitalize flex-shrink-0 ${priorityColor(goal.priority || 'medium')}`}>
                 {goal.priority || 'medium'}
               </span>
             </div>
-            <p className="text-gray-600 mb-3">{goal.description}</p>
+            {/* Fix #17: description may be empty */}
+            {goal.description && <p className="text-gray-600 mb-3 text-sm">{goal.description}</p>}
+
             <div className="mb-3">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-sm font-medium text-gray-700">Progress: {goal.current} / {goal.target} {goal.unit}</span>
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-sm font-medium text-gray-700">
+                  {goal.current} / {goal.target} {goal.unit}
+                </span>
                 <span className="text-sm text-gray-500">{Math.round(progress)}%</span>
               </div>
               <div className="w-full bg-gray-200 rounded-full h-2">
-                <div className={`h-2 rounded-full transition-all duration-300 ${goal.completed ? 'bg-green-500' : 'bg-emerald-500'}`}
+                <div className={`h-2 rounded-full transition-all duration-300 ${goal.completed ? 'bg-green-500' : 'bg-blue-500'}`}
                   style={{ width: `${progress}%` }} />
               </div>
             </div>
-            <div className="flex items-center space-x-4 text-sm text-gray-500">
-              <div className="flex items-center space-x-1">
-                <Calendar className="w-4 h-4" />
-                <span>Due: {new Date(goal.deadline).toLocaleDateString()}</span>
-              </div>
+
+            <div className="flex items-center gap-4 text-sm text-gray-500">
+              <div className="flex items-center gap-1"><Calendar className="w-4 h-4" /><span>{new Date(goal.deadline).toLocaleDateString()}</span></div>
               {!goal.completed && (
-                <span className={`font-medium ${isOverdue ? 'text-red-600' : daysLeft <= 7 ? 'text-yellow-600' : 'text-gray-600'}`}>
-                  {isOverdue ? `${Math.abs(daysLeft)} days overdue` : `${daysLeft} days left`}
+                <span className={`font-medium ${isOverdue ? 'text-red-600' : daysLeft <= 7 ? 'text-yellow-600' : 'text-gray-500'}`}>
+                  {isOverdue ? `${Math.abs(daysLeft)}d overdue` : `${daysLeft}d left`}
                 </span>
               )}
             </div>
           </div>
         </div>
-        <div className="flex items-center space-x-2">
+
+        <div className="flex items-center space-x-1 flex-shrink-0 ml-2">
           {!goal.completed && (
-            <button onClick={() => setIsUpdating(true)} className="p-2 text-gray-400 hover:text-emerald-600 transition-colors duration-200">
-              <TrendingUp className="w-5 h-5" />
+            <button onClick={() => setIsUpdating(s => !s)} className="p-2 text-gray-400 hover:text-blue-600 transition-colors" title="Update progress">
+              <TrendingUp className="w-4 h-4" />
             </button>
           )}
-          <button onClick={() => onEdit(goal)} className="p-2 text-gray-400 hover:text-emerald-600 transition-colors duration-200"><Edit className="w-5 h-5" /></button>
-          <button onClick={() => onDelete(goal.id)} className="p-2 text-gray-400 hover:text-red-600 transition-colors duration-200"><Trash2 className="w-5 h-5" /></button>
+          <button onClick={() => onEdit(goal)} className="p-2 text-gray-400 hover:text-blue-600 transition-colors"><Edit className="w-4 h-4" /></button>
+          <button onClick={() => onDelete(goal.id)} className="p-2 text-gray-400 hover:text-red-600 transition-colors"><Trash2 className="w-4 h-4" /></button>
         </div>
       </div>
+
       {isUpdating && (
-        <div className="mt-4 p-4 bg-gray-50 rounded-lg">
-          <h4 className="font-medium text-gray-900 mb-3">Update Progress</h4>
-          <div className="flex items-center space-x-3">
-            <input type="number" value={progressValue} onChange={e => setProgressValue(Number(e.target.value))}
-              min="0" max={goal.target}
-              className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500" />
-            <span className="text-sm text-gray-600">/ {goal.target} {goal.unit}</span>
+        <div className="mt-2 p-4 bg-blue-50 rounded-lg border border-blue-100">
+          <p className="font-medium text-blue-800 text-sm mb-3">Update Progress</p>
+          <div className="flex items-center gap-3">
+            <NumericInput value={progressValue} min={0} max={goal.target * 10}
+              onChange={setProgressValue}
+              className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500" />
+            <span className="text-sm text-gray-600 flex-shrink-0">/ {goal.target} {goal.unit}</span>
             <button onClick={() => { onUpdateProgress(goal.id, progressValue); setIsUpdating(false); }}
-              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-colors duration-200">Update</button>
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm transition-colors">Save</button>
             <button onClick={() => setIsUpdating(false)}
-              className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors duration-200">Cancel</button>
+              className="px-3 py-2 border border-gray-300 rounded-lg text-sm hover:bg-gray-50 transition-colors">Cancel</button>
           </div>
         </div>
       )}
@@ -225,97 +227,108 @@ const GoalCard: React.FC<{
   );
 };
 
+// ─── GoalForm ─────────────────────────────────────────────────────────────────
 const GoalForm: React.FC<{ goal?: Goal | null; onSave: (g: Goal) => void; onCancel: () => void }> =
   ({ goal, onSave, onCancel }) => {
   const goalTypes = [
-    { value: 'weight', label: 'Weight Loss/Gain', units: ['kg', 'lbs'] },
-    { value: 'strength', label: 'Strength Training', units: ['kg', 'lbs', 'reps'] },
-    { value: 'endurance', label: 'Endurance', units: ['km', 'miles', 'minutes'] },
-    { value: 'nutrition', label: 'Nutrition', units: ['calories', 'grams', 'servings'] },
-    { value: 'custom', label: 'Custom Goal', units: ['units', 'times', 'days'] },
+    { value: 'weight',    label: 'Weight',    units: ['kg','lbs'] },
+    { value: 'strength',  label: 'Strength',  units: ['kg','lbs','reps'] },
+    { value: 'endurance', label: 'Endurance', units: ['km','miles','minutes'] },
+    { value: 'nutrition', label: 'Nutrition', units: ['calories','grams','servings'] },
+    { value: 'custom',    label: 'Custom',    units: ['units','times','days'] },
   ];
-  const [formData, setFormData] = useState({
-    type: (goal?.type || 'weight') as Goal['type'],
-    title: goal?.title || '', description: goal?.description || '',
-    target: goal?.target || 0, current: goal?.current || 0,
-    unit: goal?.unit || 'kg',
-    deadline: goal?.deadline || formatDate(new Date(Date.now() + 30 * 86400000)),
-    priority: (goal?.priority || 'medium') as 'low' | 'medium' | 'high',
+
+  const [form, setForm] = useState({
+    type:        (goal?.type     || 'weight') as Goal['type'],
+    title:        goal?.title       || '',
+    description:  goal?.description || '',        // Fix #17: optional, default empty
+    target:       goal?.target      || 0,
+    current:      goal?.current     || 0,
+    unit:         goal?.unit        || 'kg',
+    deadline:     goal?.deadline    || formatDate(new Date(Date.now() + 30 * 86400000)),
+    priority:    (goal?.priority   || 'medium') as 'low' | 'medium' | 'high',
   });
-  const selectedType = goalTypes.find(t => t.value === formData.type);
+
+  const selectedType = goalTypes.find(t => t.value === form.type);
+  const cls = "w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500";
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onSave({ id: goal?.id || Date.now().toString(), ...formData, completed: goal?.completed || false } as Goal);
+    onSave({ id: goal?.id || Date.now().toString(), ...form, completed: goal?.completed || false } as Goal);
   };
+
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-2xl font-bold text-gray-900">{goal ? 'Edit Goal' : 'Create New Goal'}</h2>
-          <button onClick={onCancel} className="text-gray-400 hover:text-gray-600 text-2xl leading-none">×</button>
+          <button onClick={onCancel} className="text-gray-400 hover:text-gray-600"><X className="w-6 h-6" /></button>
         </div>
-        <form onSubmit={handleSubmit} className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+
+        <form onSubmit={handleSubmit} className="space-y-5">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Goal Type</label>
-              <select value={formData.type}
-                onChange={e => setFormData(p => ({ ...p, type: e.target.value as Goal['type'], unit: goalTypes.find(t => t.value === e.target.value)?.units[0] || '' }))}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500">
+              <select value={form.type} className={cls}
+                onChange={e => setForm(p => ({ ...p, type: e.target.value as Goal['type'], unit: goalTypes.find(t => t.value === e.target.value)?.units[0] || '' }))}>
                 {goalTypes.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
               </select>
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Priority</label>
-              <select value={formData.priority}
-                onChange={e => setFormData(p => ({ ...p, priority: e.target.value as 'low' | 'medium' | 'high' }))}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500">
+              <select value={form.priority} className={cls}
+                onChange={e => setForm(p => ({ ...p, priority: e.target.value as 'low'|'medium'|'high' }))}>
                 <option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option>
               </select>
             </div>
           </div>
+
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Goal Title</label>
-            <input type="text" required value={formData.title} onChange={e => setFormData(p => ({ ...p, title: e.target.value }))}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
-              placeholder="e.g., Lose 10kg in 3 months" />
+            <label className="block text-sm font-medium text-gray-700 mb-2">Goal Title <span className="text-red-500">*</span></label>
+            <input type="text" required value={form.title} onChange={e => setForm(p => ({ ...p, title: e.target.value }))}
+              className={cls} placeholder="e.g., Lose 10 kg in 3 months" />
           </div>
+
+          {/* Fix #17: description is optional — no required attr */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Description</label>
-            <textarea required value={formData.description} onChange={e => setFormData(p => ({ ...p, description: e.target.value }))}
-              rows={3} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
-              placeholder="Describe your goal..." />
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Description <span className="text-gray-400 font-normal text-xs">(optional)</span>
+            </label>
+            <textarea value={form.description} onChange={e => setForm(p => ({ ...p, description: e.target.value }))}
+              rows={2} className={cls} placeholder="Add more detail about your goal… (optional)" />
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Target Value</label>
-              <input type="number" required min="0" step="0.1" value={formData.target}
-                onChange={e => setFormData(p => ({ ...p, target: Number(e.target.value) }))}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500" />
+              <label className="block text-sm font-medium text-gray-700 mb-2">Target Value <span className="text-red-500">*</span></label>
+              <NumericInput value={form.target} min={0} step={0.1}
+                onChange={v => setForm(p => ({ ...p, target: v }))} className={cls} placeholder="10" />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Current Progress</label>
-              <input type="number" min="0" step="0.1" value={formData.current}
-                onChange={e => setFormData(p => ({ ...p, current: Number(e.target.value) }))}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500" />
+              <NumericInput value={form.current} min={0} step={0.1}
+                onChange={v => setForm(p => ({ ...p, current: v }))} className={cls} placeholder="0" />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Unit</label>
-              <select value={formData.unit} onChange={e => setFormData(p => ({ ...p, unit: e.target.value }))}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500">
+              <select value={form.unit} className={cls}
+                onChange={e => setForm(p => ({ ...p, unit: e.target.value }))}>
                 {selectedType?.units.map(u => <option key={u} value={u}>{u}</option>)}
               </select>
             </div>
           </div>
+
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Deadline</label>
-            <input type="date" required value={formData.deadline} onChange={e => setFormData(p => ({ ...p, deadline: e.target.value }))}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500" />
+            <label className="block text-sm font-medium text-gray-700 mb-2">Deadline <span className="text-red-500">*</span></label>
+            <input type="date" required value={form.deadline}
+              onChange={e => setForm(p => ({ ...p, deadline: e.target.value }))} className={cls} />
           </div>
-          <div className="flex justify-end space-x-4">
+
+          <div className="flex justify-end gap-3 pt-2">
             <button type="button" onClick={onCancel}
-              className="px-6 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors duration-200">Cancel</button>
+              className="px-6 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors">Cancel</button>
             <button type="submit"
-              className="px-6 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-colors duration-200">
+              className="px-6 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-colors">
               {goal ? 'Update Goal' : 'Create Goal'}
             </button>
           </div>
