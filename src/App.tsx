@@ -12,7 +12,7 @@ import Goals from './components/Goals';
 import Navigation from './components/Navigation';
 import Profile from './components/Profile';
 
-// ─── Inner app — only shown when authenticated ────────────────────────────────
+// ─── Main app (authenticated + verified users only) ───────────────────────────
 const FitnessApp: React.FC = () => {
   const { currentUser, logout } = useAuth();
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -46,6 +46,11 @@ const FitnessApp: React.FC = () => {
 };
 
 // ─── Auth gate ────────────────────────────────────────────────────────────────
+// Rules:
+//   loading              → show spinner
+//   no user              → show AuthPage (login/register/forgot)
+//   user + NOT verified  → show AuthPage (login will block them with a message)
+//   user + verified      → show FitnessApp
 const AuthGate: React.FC = () => {
   const { currentUser, loading } = useAuth();
 
@@ -53,15 +58,15 @@ const AuthGate: React.FC = () => {
     return (
       <div style={{
         minHeight: '100vh',
-        background: '#050a0e',
+        background: '#f0f4ff',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
       }}>
         <div style={{
           width: 32, height: 32,
-          border: '2px solid rgba(16,185,129,0.2)',
-          borderTopColor: '#10b981',
+          border: '3px solid rgba(59,130,246,0.2)',
+          borderTopColor: '#3b82f6',
           borderRadius: '50%',
           animation: 'spin 0.8s linear infinite',
         }} />
@@ -70,7 +75,13 @@ const AuthGate: React.FC = () => {
     );
   }
 
-  return currentUser ? <FitnessApp /> : <AuthPage />;
+  // Only let verified users into the app
+  if (currentUser && currentUser.emailVerified) {
+    return <FitnessApp />;
+  }
+
+  // Everyone else (not logged in, or logged in but unverified) sees the auth page
+  return <AuthPage />;
 };
 
 // ─── Root ─────────────────────────────────────────────────────────────────────

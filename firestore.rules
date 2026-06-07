@@ -1,51 +1,27 @@
 rules_version = '2';
-
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // ── Helpers ──────────────────────────────────────────────────────────────
-    function isSignedIn() {
-      return request.auth != null;
+    // Users can only read/write their own user document
+    match /users/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
     }
 
-    function isOwner(uid) {
-      return request.auth.uid == uid;
-    }
-
-    // ── Users collection ─────────────────────────────────────────────────────
-    // Each user can only read/write their own document
-    match /users/{uid} {
-      allow read, write: if isSignedIn() && isOwner(uid);
-
-      // ── User sub-collections (workouts, nutrition, healthMetrics, goals) ──
-      // Only the owner can read/write their own data
-      match /workouts/{docId} {
-        allow read, write: if isSignedIn() && isOwner(uid);
-      }
-
-      match /nutrition/{docId} {
-        allow read, write: if isSignedIn() && isOwner(uid);
-      }
-
-      match /healthMetrics/{docId} {
-        allow read, write: if isSignedIn() && isOwner(uid);
-      }
-
-      match /goals/{docId} {
-        allow read, write: if isSignedIn() && isOwner(uid);
-      }
-    }
-
-    // ── Usernames collection ─────────────────────────────────────────────────
-    // Anyone signed in can read (for availability checks during registration)
-    // Only the owning user can write their username entry
+    // Username index — anyone can read (for availability checks), only auth users can write
     match /usernames/{username} {
-      allow read: if isSignedIn();
-      allow create: if isSignedIn()
-        && request.resource.data.uid == request.auth.uid;
-      allow delete: if isSignedIn()
-        && resource.data.uid == request.auth.uid;
-      // No updates — usernames are deleted and re-created on change
+      allow read: if true;
+      allow write: if request.auth != null;
+    }
+
+    // Email index — anyone can read (for login existence checks), only auth users can write
+    match /emails/{email} {
+      allow read: if true;
+      allow write: if request.auth != null;
+    }
+
+    // Per-user sub-collections (workouts, nutrition, healthMetrics, goals)
+    match /users/{userId}/{collection}/{docId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
     }
   }
 }

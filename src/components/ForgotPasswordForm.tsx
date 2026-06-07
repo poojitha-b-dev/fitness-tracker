@@ -1,70 +1,78 @@
 // src/components/ForgotPasswordForm.tsx
-import React, { useState } from "react";
-import { FirebaseError } from "firebase/app";
-import { useAuth } from "./useAuth";                   // same folder
-import { isValidEmail } from "../utils/validation";    // up one → utils/
-import type { AuthView } from "../hooks/AuthPage";     // up one → hooks/
+import React, { useState } from 'react';
+import { useAuth, AuthError } from './useAuth';
+import { isValidEmail } from '../utils/validation';
+import type { AuthView } from '../hooks/AuthPage';
 
-// ─── Icons ───────────────────────────────────────────────────────────────────
+// ─── Icons ────────────────────────────────────────────────────────────────────
 const MailIcon = () => (
   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/>
-  </svg>
-);
-const AlertIcon = () => (
-  <svg className="alert-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+    <rect x="2" y="4" width="20" height="16" rx="2"/>
+    <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/>
   </svg>
 );
 const BackIcon = () => (
   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/>
+    <line x1="19" y1="12" x2="5" y2="12"/>
+    <polyline points="12 19 5 12 12 5"/>
+  </svg>
+);
+const XCircle = () => (
+  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+    <circle cx="12" cy="12" r="10"/>
+    <line x1="15" y1="9" x2="9" y2="15"/>
+    <line x1="9" y1="9" x2="15" y2="15"/>
+  </svg>
+);
+const XIcon = () => (
+  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+    <line x1="18" y1="6" x2="6" y2="18"/>
+    <line x1="6" y1="6" x2="18" y2="18"/>
   </svg>
 );
 
-const getFirebaseError = (code: string): string => {
-  const map: Record<string, string> = {
-    "auth/user-not-found":        "No account found with this email address.",
-    "auth/invalid-email":         "Please enter a valid email address.",
-    "auth/too-many-requests":     "Too many requests. Please wait and try again.",
-    "auth/network-request-failed":"Network error. Please check your connection.",
-  };
-  return map[code] ?? "Could not send reset email. Please try again.";
-};
-
+// ─── Component ────────────────────────────────────────────────────────────────
 interface Props { onSwitch: (view: AuthView) => void; }
 
 const ForgotPasswordForm: React.FC<Props> = ({ onSwitch }) => {
   const { resetPassword } = useAuth();
 
-  const [email, setEmail]     = useState("");
-  const [loading, setLoading] = useState(false);
-  const [error, setError]     = useState("");
-  const [sent, setSent]       = useState(false);
+  const [email, setEmail]       = useState('');
+  const [loading, setLoading]   = useState(false);
+  const [emailErr, setEmailErr] = useState('');
+  const [bannerErr, setBannerErr] = useState('');
+  const [sent, setSent]         = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError("");
+    setEmailErr('');
+    setBannerErr('');
 
-    if (!email.trim()) { setError("Please enter your email address."); return; }
-    if (!isValidEmail(email)) { setError("Please enter a valid email address."); return; }
+    if (!email.trim()) { setEmailErr('Please enter your email address.'); return; }
+    if (!isValidEmail(email)) { setEmailErr('Please enter a valid email address.'); return; }
 
     setLoading(true);
     try {
       await resetPassword(email.trim().toLowerCase());
       setSent(true);
-    } catch (err) {
-      const code = err instanceof FirebaseError ? err.code : "";
-      if (code === "auth/user-not-found") {
-        setSent(true); // Prevents email enumeration
+    } catch (err: any) {
+      const code: string = err instanceof AuthError ? err.code : (err?.code ?? '');
+      if (code === 'auth/user-not-found') {
+        // We check Firestore first so this is a real "not found"
+        setEmailErr('No account found with this email address.');
+      } else if (code === 'auth/too-many-requests') {
+        setBannerErr('Too many requests. Please wait a few minutes and try again.');
+      } else if (code === 'auth/network-request-failed') {
+        setBannerErr('Network error. Please check your connection.');
       } else {
-        setError(getFirebaseError(code));
+        setBannerErr('Could not send reset email. Please try again.');
       }
     } finally {
       setLoading(false);
     }
   };
 
+  // ── Success screen ──────────────────────────────────────────────────────────
   if (sent) {
     return (
       <div className="verify-banner">
@@ -74,45 +82,56 @@ const ForgotPasswordForm: React.FC<Props> = ({ onSwitch }) => {
             <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/>
           </svg>
         </div>
-        <div className="verify-title">Reset email sent</div>
+        <div className="verify-title">Check your inbox</div>
         <p className="verify-text">
-          If an account exists for <strong>{email}</strong>, you'll receive a password reset link shortly.<br /><br />
-          Check your spam folder if you don't see it.
+          A password reset link has been sent to<br />
+          <strong>{email}</strong>
         </p>
-        <button className="submit-btn" style={{ marginTop: 0 }} onClick={() => onSwitch("login")}>
+        <p className="verify-text" style={{ marginTop: -12 }}>
+          Click the link in that email to reset your password.
+          Afterwards, you'll be redirected back to sign in.
+        </p>
+        <p className="verify-text" style={{ fontSize: '12px', opacity: 0.65, marginTop: -12 }}>
+          Can't find it? Check your spam folder.
+        </p>
+        <button
+          className="submit-btn"
+          style={{ marginTop: 0 }}
+          onClick={() => onSwitch('login')}
+        >
           Back to Sign In
         </button>
       </div>
     );
   }
 
+  // ── Form ───────────────────────────────────────────────────────────────────
   return (
     <div>
       <button
         type="button"
-        onClick={() => onSwitch("login")}
+        onClick={() => onSwitch('login')}
         style={{
-          display: "inline-flex", alignItems: "center", gap: "6px",
-          background: "none", border: "none", cursor: "pointer",
-          color: "#6b7280", fontSize: "13px", padding: "0",
-          marginBottom: "20px", fontFamily: "inherit",
-          transition: "color 0.2s",
+          display: 'inline-flex', alignItems: 'center', gap: 6,
+          background: 'none', border: 'none', cursor: 'pointer',
+          color: '#7a8fa6', fontSize: 13, padding: 0,
+          marginBottom: 20, fontFamily: 'inherit',
+          transition: 'color 0.2s',
         }}
-        onMouseEnter={e => (e.currentTarget.style.color = "#9ca3af")}
-        onMouseLeave={e => (e.currentTarget.style.color = "#6b7280")}
+        onMouseEnter={e => (e.currentTarget.style.color = '#3b82f6')}
+        onMouseLeave={e => (e.currentTarget.style.color = '#7a8fa6')}
       >
         <BackIcon /> Back to sign in
       </button>
 
       <h1 className="form-title">Reset password</h1>
-      <p className="form-subtitle" style={{ marginBottom: "24px" }}>
+      <p className="form-subtitle" style={{ marginBottom: 24 }}>
         Enter your account email and we'll send you a link to reset your password.
       </p>
 
-      {error && (
+      {bannerErr && (
         <div className="alert alert-error">
-          <AlertIcon />
-          <span>{error}</span>
+          <XCircle /><span>{bannerErr}</span>
         </div>
       )}
 
@@ -123,28 +142,25 @@ const ForgotPasswordForm: React.FC<Props> = ({ onSwitch }) => {
             <span className="input-icon"><MailIcon /></span>
             <input
               type="email"
-              className="field-input"
+              className={`field-input ${emailErr ? 'error' : ''}`}
               placeholder="you@example.com"
               value={email}
-              onChange={e => { setEmail(e.target.value); setError(""); }}
+              onChange={e => { setEmail(e.target.value); setEmailErr(''); setBannerErr(''); }}
               autoComplete="email"
               disabled={loading}
               autoFocus
             />
           </div>
+          {emailErr && <div className="field-error"><XIcon />{emailErr}</div>}
         </div>
 
         <button
           type="submit"
           className="submit-btn"
-          style={{ marginTop: "8px" }}
+          style={{ marginTop: 8 }}
           disabled={loading || !email.trim()}
         >
-          {loading ? (
-            <><span className="spinner" />Sending…</>
-          ) : (
-            "Send reset link"
-          )}
+          {loading ? <><span className="spinner" />Sending…</> : 'Send reset link'}
         </button>
       </form>
     </div>
