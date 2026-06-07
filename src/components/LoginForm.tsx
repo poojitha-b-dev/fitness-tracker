@@ -1,6 +1,8 @@
 // src/components/LoginForm.tsx
 import React, { useState } from 'react';
 import { FirebaseError } from 'firebase/app';
+import { signInWithEmailAndPassword, sendEmailVerification } from 'firebase/auth';
+import { auth } from '../config/firebase';
 import { useAuth } from './useAuth';
 import type { AuthView } from '../hooks/AuthPage';
 
@@ -33,13 +35,13 @@ const AlertIcon = () => (
 // ─── Firebase error messages ──────────────────────────────────────────────────
 const getFirebaseError = (code: string): string => {
   const map: Record<string, string> = {
-    'auth/user-not-found':        'No account found with this email address.',
-    'auth/wrong-password':        'Incorrect password. Please try again.',
-    'auth/invalid-credential':    'Invalid email or password.',
-    'auth/too-many-requests':     'Too many failed attempts. Please try again later or reset your password.',
-    'auth/user-disabled':         'This account has been disabled. Please contact support.',
-    'auth/invalid-email':         'Please enter a valid email address.',
-    'auth/network-request-failed':'Network error. Please check your connection.',
+    'auth/user-not-found':         'No account found with this email address.',
+    'auth/wrong-password':         'Incorrect password. Please try again.',
+    'auth/invalid-credential':     'Invalid email or password.',
+    'auth/too-many-requests':      'Too many failed attempts. Please try again later or reset your password.',
+    'auth/user-disabled':          'This account has been disabled. Please contact support.',
+    'auth/invalid-email':          'Please enter a valid email address.',
+    'auth/network-request-failed': 'Network error. Please check your connection.',
   };
   return map[code] ?? 'Something went wrong. Please try again.';
 };
@@ -49,24 +51,59 @@ interface Props { onSwitch: (view: AuthView) => void; }
 
 const LoginForm: React.FC<Props> = ({ onSwitch }) => {
   const { login } = useAuth();
-  const [email, setEmail]       = useState('');
-  const [password, setPassword] = useState('');
-  const [showPw, setShowPw]     = useState(false);
-  const [loading, setLoading]   = useState(false);
-  const [error, setError]       = useState('');
+  const [email, setEmail]             = useState('');
+  const [password, setPassword]       = useState('');
+  const [showPw, setShowPw]           = useState(false);
+  const [loading, setLoading]         = useState(false);
+  const [error, setError]             = useState('');
+  const [unverified, setUnverified]   = useState(false);
+  const [resendLoading, setResendLoading] = useState(false);
+  const [resendSent, setResendSent]   = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setUnverified(false);
     if (!email.trim() || !password) { setError('Please fill in all fields.'); return; }
     setLoading(true);
     try {
       await login(email.trim().toLowerCase(), password);
     } catch (err) {
-      const code = err instanceof FirebaseError ? err.code : '';
-      setError(getFirebaseError(code));
+      const code = (err as any).code ?? (err instanceof FirebaseError ? err.code : '');
+      if (code === 'auth/email-not-verified') {
+        setUnverified(true);
+        setError('Your email is not verified yet. Click the link we sent to your inbox, then sign in.');
+      } else {
+        setError(getFirebaseError(code));
+      }
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Resend verification: sign in temporarily, send email, sign out again
+  const handleResend = async () => {
+    if (!email.trim() || !password) {
+      setError('Enter your email and password above so we can resend the verification link.');
+      return;
+    }
+    setResendLoading(true);
+    try {
+      // Temporarily sign in to get the user object (needed to send verification)
+      const { signInWithEmailAndPassword: signIn } = await import('firebase/auth');
+      const credential = await signIn(auth, email.trim().toLowerCase(), password);
+      await sendEmailVerification(credential.user, {
+        url: 'https://fitness-tracker-two-psi.vercel.app/',
+        handleCodeInApp: false,
+      });
+      // Sign back out
+      const { signOut } = await import('firebase/auth');
+      await signOut(auth);
+      setResendSent(true);
+    } catch {
+      setError('Could not resend verification email. Please check your email and password.');
+    } finally {
+      setResendLoading(false);
     }
   };
 
@@ -79,7 +116,31 @@ const LoginForm: React.FC<Props> = ({ onSwitch }) => {
 
       {error && (
         <div className="alert alert-error">
-          <AlertIcon /><span>{error}</span>
+          <AlertIcon />
+          <div style={{ flex: 1 }}>
+            <span>{error}</span>
+            {unverified && !resendSent && (
+              <div style={{ marginTop: 8 }}>
+                <button
+                  type="button"
+                  onClick={handleResend}
+                  disabled={resendLoading}
+                  style={{
+                    background: 'none', border: '1px solid currentColor', borderRadius: 6,
+                    padding: '4px 10px', fontSize: 11.5, cursor: 'pointer',
+                    color: 'inherit', fontFamily: 'inherit', opacity: resendLoading ? 0.6 : 1,
+                  }}
+                >
+                  {resendLoading ? 'Sending…' : 'Resend verification email'}
+                </button>
+              </div>
+            )}
+            {resendSent && (
+              <div style={{ marginTop: 6, fontSize: 12, opacity: 0.85 }}>
+                Verification email sent! Check your inbox.
+              </div>
+            )}
+          </div>
         </div>
       )}
 
@@ -90,7 +151,7 @@ const LoginForm: React.FC<Props> = ({ onSwitch }) => {
             <span className="input-icon"><MailIcon /></span>
             <input
               type="email" className="field-input" placeholder="you@example.com"
-              value={email} onChange={e => setEmail(e.target.value)}
+              value={email} onChange={e => { setEmail(e.target.value); setError(''); setUnverified(false); setResendSent(false); }}
               autoComplete="email" disabled={loading}
             />
           </div>

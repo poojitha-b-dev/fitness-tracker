@@ -39,7 +39,7 @@ const AuthPage: React.FC = () => {
               <path d="M14 20h12M20 14v12" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"/>
             </svg>
           </div>
-          <span className="brand-name">FitTracker</span>
+          <span className="brand-name">MyFitTrackr</span>
         </div>
 
         <div className={`auth-card ${animating ? 'card-fade-out' : 'card-fade-in'}`}>

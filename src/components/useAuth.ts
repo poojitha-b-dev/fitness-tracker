@@ -1,5 +1,4 @@
 // src/components/useAuth.ts
-import { storage } from '../utils/storage';
 import { useState, useEffect, createContext, useContext } from "react";
 import {
   User,
@@ -10,9 +9,12 @@ import {
   sendPasswordResetEmail,
   sendEmailVerification,
   updateProfile,
+  reload,
 } from "firebase/auth";
 import { doc, setDoc, getDoc, serverTimestamp } from "firebase/firestore";
 import { auth, db } from "../config/firebase";
+
+const SITE_URL = "https://myfittrackr.vercel.app";
 
 export interface AuthUser extends User {
   username?: string;
@@ -26,6 +28,8 @@ interface AuthContextType {
   logout: () => Promise<void>;
   resetPassword: (email: string) => Promise<void>;
   refreshUser: () => Promise<void>;
+  syncFromCloud: () => Promise<void>;
+  clearAll: () => void;
 }
 
 export const AuthContext = createContext<AuthContextType | null>(null);
@@ -34,7 +38,6 @@ export const useAuthState = () => {
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // Fetch and attach Firestore username to the Firebase user object
   const hydrateUser = async (user: User): Promise<AuthUser> => {
     try {
       const userDoc = await getDoc(doc(db, "users", user.uid));
@@ -52,27 +55,54 @@ export const useAuthState = () => {
       if (user) {
         const hydrated = await hydrateUser(user);
         setCurrentUser(hydrated);
-        await storage.syncFromCloud();   // ← add this
       } else {
         setCurrentUser(null);
-        storage.clearAll();              // ← add this
       }
       setLoading(false);
     });
     return unsubscribe;
   }, []);
 
-  // Call this after profile updates so the UI reflects new data immediately
   const refreshUser = async () => {
     if (!auth.currentUser) return;
+    // Reload from Firebase to get latest emailVerified status
+    await reload(auth.currentUser);
     const hydrated = await hydrateUser(auth.currentUser);
-    setCurrentUser({ ...hydrated } as AuthUser); // new reference triggers re-render
+    setCurrentUser({ ...hydrated } as AuthUser);
   };
 
+  const syncFromCloud = async () => {
+    if (!auth.currentUser) return;
+    const hydrated = await hydrateUser(auth.currentUser);
+    setCurrentUser({ ...hydrated } as AuthUser);
+  };
+
+  const clearAll = () => {
+    // Clear localStorage on logout
+    const keysToKeep: string[] = [];
+    Object.keys(localStorage).forEach((key) => {
+      if (!key.startsWith("fitness-app-")) keysToKeep.push(key);
+    });
+    Object.keys(localStorage).forEach((key) => {
+      if (key.startsWith("fitness-app-")) localStorage.removeItem(key);
+    });
+  };
+
+  // ── login: block unverified users ──────────────────────────────────────────
   const login = async (email: string, password: string) => {
-    await signInWithEmailAndPassword(auth, email, password);
+    const credential = await signInWithEmailAndPassword(auth, email, password);
+    const user = credential.user;
+
+    if (!user.emailVerified) {
+      // Sign them back out immediately — don't let them in
+      await signOut(auth);
+      const err = new Error("Please verify your email before signing in. Check your inbox for the verification link.");
+      (err as any).code = "auth/email-not-verified";
+      throw err;
+    }
   };
 
+  // ── register: send verification with continueUrl ───────────────────────────
   const register = async (email: string, password: string, username: string) => {
     const credential = await createUserWithEmailAndPassword(auth, email, password);
     const user = credential.user;
@@ -93,18 +123,30 @@ export const useAuthState = () => {
       uid: user.uid,
     });
 
-    await sendEmailVerification(user);
-  };
+    // Send verification email — after clicking it, user lands on the login page
+    await sendEmailVerification(user, {
+      url: `${SITE_URL}/`,
+      handleCodeInApp: false,
+    });
 
-  const logout = async () => {
+    // Sign them out immediately — they must verify first
     await signOut(auth);
   };
 
-  const resetPassword = async (email: string) => {
-    await sendPasswordResetEmail(auth, email);
+  const logout = async () => {
+    clearAll();
+    await signOut(auth);
   };
 
-  return { currentUser, loading, login, register, logout, resetPassword, refreshUser };
+  // ── resetPassword: include continueUrl so user can navigate back ───────────
+  const resetPassword = async (email: string) => {
+    await sendPasswordResetEmail(auth, email, {
+      url: `${SITE_URL}/`,
+      handleCodeInApp: false,
+    });
+  };
+
+  return { currentUser, loading, login, register, logout, resetPassword, refreshUser, syncFromCloud, clearAll };
 };
 
 export const useAuth = () => {

@@ -59,7 +59,7 @@ const Navigation: React.FC<NavigationProps> = ({ activeTab, onTabChange, user, o
                 fontSize: 18, fontWeight: 800,
                 color: '#1e2a3a', letterSpacing: '-0.4px',
               }}>
-                FitTracker
+                MyFitTrackr
               </span>
             </div>
 

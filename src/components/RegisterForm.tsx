@@ -110,7 +110,10 @@ const VerifyEmailScreen: React.FC<{ email: string; onSwitch: (v: AuthView) => vo
     <p className="verify-text">
       We sent a verification link to<br />
       <strong>{email}</strong><br /><br />
-      Click the link to activate your account, then come back to sign in.
+      Click the link to activate your account. Once verified, come back here and sign in.
+    </p>
+    <p className="verify-text" style={{ fontSize: '12px', opacity: 0.7, marginBottom: 20, marginTop: -12 }}>
+      Can't find it? Check your spam folder.
     </p>
     <button className="submit-btn" style={{ marginTop: 0 }} onClick={() => onSwitch('login')}>
       Go to Sign In
