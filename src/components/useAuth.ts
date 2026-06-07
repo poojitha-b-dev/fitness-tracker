@@ -10,6 +10,7 @@ import {
   sendEmailVerification,
   updateProfile,
   reload,
+  fetchSignInMethodsForEmail,
 } from "firebase/auth";
 import { doc, setDoc, getDoc, serverTimestamp } from "firebase/firestore";
 import { auth, db } from "../config/firebase";
@@ -45,7 +46,7 @@ export const useAuthState = () => {
         (user as AuthUser).username = userDoc.data().username;
       }
     } catch {
-      // Fail silently — auth still works without Firestore data
+      // Fail silently
     }
     return user as AuthUser;
   };
@@ -65,7 +66,6 @@ export const useAuthState = () => {
 
   const refreshUser = async () => {
     if (!auth.currentUser) return;
-    // Reload from Firebase to get latest emailVerified status
     await reload(auth.currentUser);
     const hydrated = await hydrateUser(auth.currentUser);
     setCurrentUser({ ...hydrated } as AuthUser);
@@ -78,31 +78,41 @@ export const useAuthState = () => {
   };
 
   const clearAll = () => {
-    // Clear localStorage on logout
-    const keysToKeep: string[] = [];
-    Object.keys(localStorage).forEach((key) => {
-      if (!key.startsWith("fitness-app-")) keysToKeep.push(key);
-    });
     Object.keys(localStorage).forEach((key) => {
       if (key.startsWith("fitness-app-")) localStorage.removeItem(key);
     });
   };
 
-  // ── login: block unverified users ──────────────────────────────────────────
+  // ── login: separate "no account" vs "wrong password", block unverified ──────
   const login = async (email: string, password: string) => {
+    // Step 1: check if the email even exists
+    let methods: string[] = [];
+    try {
+      methods = await fetchSignInMethodsForEmail(auth, email);
+    } catch {
+      // If this fails, proceed — Firebase will throw the real error below
+    }
+
+    if (methods.length === 0) {
+      const err = new Error("No account found with this email address.");
+      (err as any).code = "auth/user-not-found";
+      throw err;
+    }
+
+    // Step 2: try signing in — this will throw if password is wrong
     const credential = await signInWithEmailAndPassword(auth, email, password);
     const user = credential.user;
 
+    // Step 3: block unverified users
     if (!user.emailVerified) {
-      // Sign them back out immediately — don't let them in
       await signOut(auth);
-      const err = new Error("Please verify your email before signing in. Check your inbox for the verification link.");
+      const err = new Error("Please verify your email before signing in.");
       (err as any).code = "auth/email-not-verified";
       throw err;
     }
   };
 
-  // ── register: send verification with continueUrl ───────────────────────────
+  // ── register: send verification email with continueUrl ────────────────────
   const register = async (email: string, password: string, username: string) => {
     const credential = await createUserWithEmailAndPassword(auth, email, password);
     const user = credential.user;
@@ -118,18 +128,17 @@ export const useAuthState = () => {
       createdAt: serverTimestamp(),
     });
 
-    // Username → uid index for uniqueness checks
     await setDoc(doc(db, "usernames", username.toLowerCase()), {
       uid: user.uid,
     });
 
-    // Send verification email — after clicking it, user lands on the login page
+    // continueUrl = where Firebase sends the user AFTER they click the verify link
     await sendEmailVerification(user, {
       url: `${SITE_URL}/`,
       handleCodeInApp: false,
     });
 
-    // Sign them out immediately — they must verify first
+    // Sign out immediately — must verify email before entering the app
     await signOut(auth);
   };
 
@@ -138,7 +147,7 @@ export const useAuthState = () => {
     await signOut(auth);
   };
 
-  // ── resetPassword: include continueUrl so user can navigate back ───────────
+  // ── resetPassword: continueUrl so user can navigate back after reset ───────
   const resetPassword = async (email: string) => {
     await sendPasswordResetEmail(auth, email, {
       url: `${SITE_URL}/`,
