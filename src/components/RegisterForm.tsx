@@ -194,7 +194,7 @@ const RegisterForm: React.FC<Props> = ({ onSwitch }) => {
         setUsernameOk(false);
       } else if (code === 'auth/weak-password') {
         setBannerErr('Password is too weak. Please choose a stronger one.');
-      } else if (code === 'auth/invalid-email') {
+      } else if (code === 'auth/invalid-email' || code === 'auth/invalid-email-format') {
         setEmailErr('Please enter a valid email address.');
       } else if (code === 'auth/network-request-failed') {
         setBannerErr('Network error. Please check your connection.');

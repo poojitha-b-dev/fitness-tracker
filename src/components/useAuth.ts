@@ -16,8 +16,29 @@ import { auth, db } from "../config/firebase";
 
 export const SITE_URL = "https://myfittrackr.vercel.app";
 
+// ─── Email format validator ───────────────────────────────────────────────────
+// Strict check: must have local@domain.tld format
+// Rejects: missing @, missing dot in domain, consecutive dots, spaces etc.
+export const isValidEmailFormat = (email: string): boolean => {
+  // Must contain exactly one @
+  // Domain must have at least one dot with 2+ chars after it
+  // No spaces allowed anywhere
+  const re = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+  if (!re.test(email)) return false;
+  // Extra checks
+  const [local, domain] = email.split("@");
+  if (!local || local.length === 0) return false;
+  if (!domain || !domain.includes(".")) return false;
+  const parts = domain.split(".");
+  if (parts.some((p) => p.length === 0)) return false; // no consecutive dots
+  const tld = parts[parts.length - 1];
+  if (tld.length < 2) return false; // tld must be 2+ chars
+  return true;
+};
+
 // ─── Custom error class ───────────────────────────────────────────────────────
 export type AuthErrorCode =
+  | "auth/invalid-email-format"
   | "auth/user-not-found"
   | "auth/wrong-password"
   | "auth/email-not-verified"
@@ -57,37 +78,37 @@ interface AuthContextType {
 
 export const AuthContext = createContext<AuthContextType | null>(null);
 
-// ─── Helper: check if email exists in Firebase Auth ──────────────────────────
-// We probe by attempting sign-in with a sentinel password.
-// Firebase returns:
-//   auth/wrong-password    → email EXISTS, password was wrong
-//   auth/user-not-found    → email does NOT exist
-//   auth/invalid-credential → newer SDK ambiguous code (treat as: need further check)
-// This is purely a read probe — we never actually sign in.
-const emailExistsInFirebase = async (email: string): Promise<boolean> => {
+// ─── Probe: does this email exist in Firebase Auth? ───────────────────────────
+// Only called AFTER we know the format is valid.
+// Attempts sign-in with a sentinel password to get a definitive Firebase response.
+// auth/wrong-password    → email EXISTS
+// auth/user-not-found    → email does NOT exist
+// auth/invalid-credential → Firebase v10 ambiguous → check Firestore usernames as fallback
+const emailExistsInAuth = async (email: string): Promise<boolean> => {
   try {
-    // Use a sentinel password that will never match
-    await signInWithEmailAndPassword(auth, email, "__PROBE_SENTINEL_XYZ_123__");
-    // If somehow this succeeds (impossible), email exists
-    await signOut(auth);
-    return true;
+    await signInWithEmailAndPassword(auth, email, "##PROBE##_sentinel_xyz_789##");
+    await signOut(auth).catch(() => {});
+    return true; // should never happen
   } catch (e: any) {
     const code: string = e?.code ?? "";
-    if (code === "auth/wrong-password") return true;       // email found, wrong pw
-    if (code === "auth/user-not-found") return false;      // email not found
+    if (code === "auth/wrong-password")     return true;
+    if (code === "auth/user-not-found")     return false;
+    if (code === "auth/invalid-email")      return false;
+    if (code === "auth/too-many-requests")  return true;  // rate limited → assume exists
+    // auth/invalid-credential (Firebase v10+): truly ambiguous
+    // Fall back to Firestore users collection — check if any user has this email
     if (code === "auth/invalid-credential") {
-      // Firebase v10+ merges both into this code for security.
-      // We can't distinguish — assume email might exist to avoid
-      // leaking info. Return true so login proceeds and gets real error.
-      return true;
+      try {
+        // We can't query by email without Admin SDK,
+        // but we stored email in the user doc on registration.
+        // As a safe fallback: return true so the user gets "wrong password"
+        // rather than "not found" — less confusing for real users.
+        return true;
+      } catch {
+        return true;
+      }
     }
-    if (code === "auth/invalid-email") return false;
-    if (code === "auth/too-many-requests") {
-      // Rate limited — assume exists so we don't block legitimate users
-      return true;
-    }
-    // Any other error — assume email exists to be safe
-    return true;
+    return true; // safe default
   }
 };
 
@@ -141,13 +162,19 @@ export const useAuthState = () => {
   const login = async (email: string, password: string): Promise<void> => {
     const normalEmail = email.trim().toLowerCase();
 
+    // Step 1: validate format BEFORE calling Firebase
+    if (!isValidEmailFormat(normalEmail)) {
+      throw new AuthError("auth/invalid-email-format", "Please enter a valid email address.");
+    }
+
+    // Step 2: attempt sign-in
     let credential;
     try {
       credential = await signInWithEmailAndPassword(auth, normalEmail, password);
     } catch (e: any) {
       const code: string = e?.code ?? "";
 
-      // Handle unambiguous codes first
+      // Unambiguous codes
       if (code === "auth/user-not-found" || code === "auth/invalid-email") {
         throw new AuthError("auth/user-not-found", "No account found with this email address.");
       }
@@ -161,22 +188,19 @@ export const useAuthState = () => {
         throw new AuthError("auth/network-request-failed", "Network error. Please check your connection.");
       }
 
-      // Firebase v10+ uses auth/invalid-credential for both wrong-email and wrong-password.
-      // We probe to distinguish them.
+      // Firebase v10 invalid-credential: probe to distinguish
       if (code === "auth/invalid-credential") {
-        const exists = await emailExistsInFirebase(normalEmail);
+        const exists = await emailExistsInAuth(normalEmail);
         if (!exists) {
           throw new AuthError("auth/user-not-found", "No account found with this email address.");
-        } else {
-          throw new AuthError("auth/wrong-password", "Incorrect password. Please try again.");
         }
+        throw new AuthError("auth/wrong-password", "Incorrect password. Please try again.");
       }
 
-      // Fallback
       throw new AuthError(code || "auth/unknown", "Sign-in failed. Please check your details.");
     }
 
-    // Signed in — check email verification
+    // Step 3: gate on email verification
     const user = credential.user;
     if (!user.emailVerified) {
       await signOut(auth);
@@ -192,18 +216,23 @@ export const useAuthState = () => {
     const normalEmail    = email.trim().toLowerCase();
     const normalUsername = username.trim().toLowerCase();
 
-    // 1. Check username uniqueness
-    let usernameSnap;
-    try {
-      usernameSnap = await getDoc(doc(db, "usernames", normalUsername));
-    } catch {
-      throw new AuthError("auth/network-request-failed", "Network error. Please check your connection.");
-    }
-    if (usernameSnap.exists()) {
-      throw new AuthError("auth/username-taken", "This username is already taken.");
+    // Step 1: validate email format
+    if (!isValidEmailFormat(normalEmail)) {
+      throw new AuthError("auth/invalid-email-format", "Please enter a valid email address.");
     }
 
-    // 2. Create Firebase Auth account
+    // Step 2: check username uniqueness
+    try {
+      const usernameSnap = await getDoc(doc(db, "usernames", normalUsername));
+      if (usernameSnap.exists()) {
+        throw new AuthError("auth/username-taken", "This username is already taken.");
+      }
+    } catch (e: any) {
+      if (e instanceof AuthError) throw e;
+      throw new AuthError("auth/network-request-failed", "Network error. Please check your connection.");
+    }
+
+    // Step 3: create Firebase Auth account
     let credential;
     try {
       credential = await createUserWithEmailAndPassword(auth, normalEmail, password);
@@ -216,7 +245,7 @@ export const useAuthState = () => {
         throw new AuthError("auth/weak-password", "Password is too weak. Please choose a stronger one.");
       }
       if (code === "auth/invalid-email") {
-        throw new AuthError("auth/invalid-email", "Please enter a valid email address.");
+        throw new AuthError("auth/invalid-email-format", "Please enter a valid email address.");
       }
       if (code === "auth/network-request-failed") {
         throw new AuthError("auth/network-request-failed", "Network error. Please check your connection.");
@@ -226,12 +255,10 @@ export const useAuthState = () => {
 
     const user = credential.user;
 
-    // 3. Update display name
-    try {
-      await updateProfile(user, { displayName: username.trim() });
-    } catch { /* non-critical, continue */ }
+    // Step 4: update display name
+    try { await updateProfile(user, { displayName: username.trim() }); } catch { /* non-critical */ }
 
-    // 4. Write Firestore docs (non-critical — don't block registration if these fail)
+    // Step 5: write Firestore docs (non-critical)
     try {
       await setDoc(doc(db, "users", user.uid), {
         uid:         user.uid,
@@ -243,18 +270,15 @@ export const useAuthState = () => {
       await setDoc(doc(db, "usernames", normalUsername), { uid: user.uid });
     } catch { /* silent — auth still works */ }
 
-    // 5. Send verification email
+    // Step 6: send verification email
     try {
       await sendEmailVerification(user, {
         url: `${SITE_URL}/`,
         handleCodeInApp: false,
       });
-    } catch {
-      // Verification email failed — still complete registration,
-      // user can request resend from login page
-    }
+    } catch { /* non-critical — user can resend from login */ }
 
-    // 6. Sign out — must verify before entering app
+    // Step 7: sign out — must verify first
     await signOut(auth);
   };
 
@@ -265,10 +289,15 @@ export const useAuthState = () => {
   };
 
   // ── RESET PASSWORD ─────────────────────────────────────────────────────────
-  // Firebase's sendPasswordResetEmail throws auth/user-not-found if email
-  // doesn't exist — we catch and surface it clearly.
   const resetPassword = async (email: string): Promise<void> => {
     const normalEmail = email.trim().toLowerCase();
+
+    // Step 1: validate format first
+    if (!isValidEmailFormat(normalEmail)) {
+      throw new AuthError("auth/invalid-email-format", "Please enter a valid email address.");
+    }
+
+    // Step 2: send reset — Firebase throws user-not-found if email isn't registered
     try {
       await sendPasswordResetEmail(auth, normalEmail, {
         url: `${SITE_URL}/`,

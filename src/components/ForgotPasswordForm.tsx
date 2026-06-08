@@ -1,10 +1,8 @@
 // src/components/ForgotPasswordForm.tsx
 import React, { useState } from 'react';
 import { useAuth, AuthError } from './useAuth';
-import { isValidEmail } from '../utils/validation';
 import type { AuthView } from '../hooks/AuthPage';
 
-// ─── Icons ────────────────────────────────────────────────────────────────────
 const MailIcon = () => (
   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <rect x="2" y="4" width="20" height="16" rx="2"/>
@@ -17,39 +15,36 @@ const BackIcon = () => (
     <polyline points="12 19 5 12 12 5"/>
   </svg>
 );
-const XCircle = () => (
-  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
-    <circle cx="12" cy="12" r="10"/>
-    <line x1="15" y1="9" x2="9" y2="15"/>
-    <line x1="9" y1="9" x2="15" y2="15"/>
-  </svg>
-);
 const XIcon = () => (
-  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
     <line x1="18" y1="6" x2="6" y2="18"/>
     <line x1="6" y1="6" x2="18" y2="18"/>
   </svg>
 );
+const AlertIcon = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+    <circle cx="12" cy="12" r="10"/>
+    <line x1="12" y1="8" x2="12" y2="12"/>
+    <line x1="12" y1="16" x2="12.01" y2="16"/>
+  </svg>
+);
 
-// ─── Component ────────────────────────────────────────────────────────────────
 interface Props { onSwitch: (view: AuthView) => void; }
 
 const ForgotPasswordForm: React.FC<Props> = ({ onSwitch }) => {
   const { resetPassword } = useAuth();
 
-  const [email, setEmail]       = useState('');
-  const [loading, setLoading]   = useState(false);
-  const [emailErr, setEmailErr] = useState('');
+  const [email, setEmail]         = useState('');
+  const [loading, setLoading]     = useState(false);
+  const [emailErr, setEmailErr]   = useState('');
   const [bannerErr, setBannerErr] = useState('');
-  const [sent, setSent]         = useState(false);
+  const [sent, setSent]           = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setEmailErr('');
     setBannerErr('');
-
     if (!email.trim()) { setEmailErr('Please enter your email address.'); return; }
-    if (!isValidEmail(email)) { setEmailErr('Please enter a valid email address.'); return; }
 
     setLoading(true);
     try {
@@ -57,8 +52,9 @@ const ForgotPasswordForm: React.FC<Props> = ({ onSwitch }) => {
       setSent(true);
     } catch (err: any) {
       const code: string = err instanceof AuthError ? err.code : (err?.code ?? '');
-      if (code === 'auth/user-not-found') {
-        // We check Firestore first so this is a real "not found"
+      if (code === 'auth/invalid-email-format' || code === 'auth/invalid-email') {
+        setEmailErr('Please enter a valid email address (e.g. name@example.com).');
+      } else if (code === 'auth/user-not-found') {
         setEmailErr('No account found with this email address.');
       } else if (code === 'auth/too-many-requests') {
         setBannerErr('Too many requests. Please wait a few minutes and try again.');
@@ -72,7 +68,6 @@ const ForgotPasswordForm: React.FC<Props> = ({ onSwitch }) => {
     }
   };
 
-  // ── Success screen ──────────────────────────────────────────────────────────
   if (sent) {
     return (
       <div className="verify-banner">
@@ -88,24 +83,19 @@ const ForgotPasswordForm: React.FC<Props> = ({ onSwitch }) => {
           <strong>{email}</strong>
         </p>
         <p className="verify-text" style={{ marginTop: -12 }}>
-          Click the link in that email to reset your password.
-          Afterwards, you'll be redirected back to sign in.
+          Click the link to reset your password. Afterwards you'll be
+          redirected back to sign in.
         </p>
         <p className="verify-text" style={{ fontSize: '12px', opacity: 0.65, marginTop: -12 }}>
           Can't find it? Check your spam folder.
         </p>
-        <button
-          className="submit-btn"
-          style={{ marginTop: 0 }}
-          onClick={() => onSwitch('login')}
-        >
+        <button className="submit-btn" style={{ marginTop: 0 }} onClick={() => onSwitch('login')}>
           Back to Sign In
         </button>
       </div>
     );
   }
 
-  // ── Form ───────────────────────────────────────────────────────────────────
   return (
     <div>
       <button
@@ -115,8 +105,7 @@ const ForgotPasswordForm: React.FC<Props> = ({ onSwitch }) => {
           display: 'inline-flex', alignItems: 'center', gap: 6,
           background: 'none', border: 'none', cursor: 'pointer',
           color: '#7a8fa6', fontSize: 13, padding: 0,
-          marginBottom: 20, fontFamily: 'inherit',
-          transition: 'color 0.2s',
+          marginBottom: 20, fontFamily: 'inherit', transition: 'color 0.2s',
         }}
         onMouseEnter={e => (e.currentTarget.style.color = '#3b82f6')}
         onMouseLeave={e => (e.currentTarget.style.color = '#7a8fa6')}
@@ -126,12 +115,12 @@ const ForgotPasswordForm: React.FC<Props> = ({ onSwitch }) => {
 
       <h1 className="form-title">Reset password</h1>
       <p className="form-subtitle" style={{ marginBottom: 24 }}>
-        Enter your account email and we'll send you a link to reset your password.
+        Enter your account email and we'll send you a reset link.
       </p>
 
       {bannerErr && (
         <div className="alert alert-error">
-          <XCircle /><span>{bannerErr}</span>
+          <AlertIcon /><span>{bannerErr}</span>
         </div>
       )}
 

@@ -5,7 +5,6 @@ import { auth } from '../config/firebase';
 import { useAuth, AuthError, SITE_URL } from './useAuth';
 import type { AuthView } from '../hooks/AuthPage';
 
-// ─── Icons ────────────────────────────────────────────────────────────────────
 const MailIcon = () => (
   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <rect x="2" y="4" width="20" height="16" rx="2"/>
@@ -30,59 +29,56 @@ const EyeIcon = ({ open }: { open: boolean }) => open ? (
     <line x1="1" y1="1" x2="23" y2="23"/>
   </svg>
 );
-const XCircle = () => (
-  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+const XIcon = () => (
+  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+    <line x1="18" y1="6" x2="6" y2="18"/>
+    <line x1="6" y1="6" x2="18" y2="18"/>
+  </svg>
+);
+const AlertIcon = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
     <circle cx="12" cy="12" r="10"/>
-    <line x1="15" y1="9" x2="9" y2="15"/>
-    <line x1="9" y1="9" x2="15" y2="15"/>
+    <line x1="12" y1="8" x2="12" y2="12"/>
+    <line x1="12" y1="16" x2="12.01" y2="16"/>
   </svg>
 );
 
-// ─── Component ────────────────────────────────────────────────────────────────
 interface Props { onSwitch: (view: AuthView) => void; }
 
 const LoginForm: React.FC<Props> = ({ onSwitch }) => {
   const { login } = useAuth();
 
-  const [email, setEmail]           = useState('');
-  const [password, setPassword]     = useState('');
-  const [showPw, setShowPw]         = useState(false);
-  const [loading, setLoading]       = useState(false);
+  const [email, setEmail]       = useState('');
+  const [password, setPassword] = useState('');
+  const [showPw, setShowPw]     = useState(false);
+  const [loading, setLoading]   = useState(false);
 
-  // Separate error state per field + a general banner
-  const [emailErr, setEmailErr]     = useState('');
+  const [emailErr, setEmailErr]       = useState('');
   const [passwordErr, setPasswordErr] = useState('');
-  const [bannerErr, setBannerErr]   = useState('');
-
-  // Unverified email state
-  const [unverified, setUnverified]         = useState(false);
-  const [resendLoading, setResendLoading]   = useState(false);
-  const [resendSent, setResendSent]         = useState(false);
+  const [bannerErr, setBannerErr]     = useState('');
+  const [unverified, setUnverified]   = useState(false);
+  const [resendLoading, setResendLoading] = useState(false);
+  const [resendSent, setResendSent]   = useState(false);
 
   const clearErrors = () => {
-    setEmailErr('');
-    setPasswordErr('');
-    setBannerErr('');
-    setUnverified(false);
-    setResendSent(false);
+    setEmailErr(''); setPasswordErr(''); setBannerErr('');
+    setUnverified(false); setResendSent(false);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     clearErrors();
-
-    // Basic client-side validation
-    if (!email.trim())  { setEmailErr('Please enter your email address.'); return; }
-    if (!password)      { setPasswordErr('Please enter your password.'); return; }
+    if (!email.trim()) { setEmailErr('Please enter your email address.'); return; }
+    if (!password)     { setPasswordErr('Please enter your password.'); return; }
 
     setLoading(true);
     try {
       await login(email.trim().toLowerCase(), password);
-      // If login() resolves without throwing, AuthGate will redirect automatically
     } catch (err: any) {
       const code: string = err instanceof AuthError ? err.code : (err?.code ?? '');
-
-      if (code === 'auth/user-not-found' || code === 'auth/invalid-email') {
+      if (code === 'auth/invalid-email-format' || code === 'auth/invalid-email') {
+        setEmailErr('Please enter a valid email address (e.g. name@example.com).');
+      } else if (code === 'auth/user-not-found') {
         setEmailErr('No account found with this email address.');
       } else if (code === 'auth/wrong-password') {
         setPasswordErr('Incorrect password. Please try again.');
@@ -92,7 +88,7 @@ const LoginForm: React.FC<Props> = ({ onSwitch }) => {
       } else if (code === 'auth/too-many-requests') {
         setBannerErr('Too many failed attempts. Please wait a few minutes or reset your password.');
       } else if (code === 'auth/network-request-failed') {
-        setBannerErr('Network error. Please check your connection and try again.');
+        setBannerErr('Network error. Please check your connection.');
       } else {
         setBannerErr('Sign-in failed. Please check your details and try again.');
       }
@@ -101,22 +97,19 @@ const LoginForm: React.FC<Props> = ({ onSwitch }) => {
     }
   };
 
-  // Resend: temporarily sign in to get user object, send email, sign back out
   const handleResend = async () => {
     if (!email.trim() || !password) {
-      setBannerErr('Please make sure your email and password are filled in above.');
+      setBannerErr('Please fill in your email and password above first.');
       return;
     }
     setResendLoading(true);
     try {
       const cred = await signInWithEmailAndPassword(auth, email.trim().toLowerCase(), password);
-      await sendEmailVerification(cred.user, {
-        url: `${SITE_URL}/`,
-        handleCodeInApp: false,
-      });
+      await sendEmailVerification(cred.user, { url: `${SITE_URL}/`, handleCodeInApp: false });
       await signOut(auth);
       setResendSent(true);
       setBannerErr('');
+      setUnverified(false);
     } catch {
       setBannerErr('Could not resend. Please check your email and password are correct.');
     } finally {
@@ -128,19 +121,14 @@ const LoginForm: React.FC<Props> = ({ onSwitch }) => {
     <div>
       <h1 className="form-title">Welcome back</h1>
       <p className="form-subtitle">
-        Don't have an account?{' '}
-        <span onClick={() => onSwitch('register')}>Create one</span>
+        Don't have an account? <span onClick={() => onSwitch('register')}>Create one</span>
       </p>
 
-      {/* Banner for general / unverified errors */}
       {(bannerErr || resendSent) && (
         <div className={`alert ${resendSent ? 'alert-success' : 'alert-error'}`}>
-          <XCircle />
+          <AlertIcon />
           <div style={{ flex: 1 }}>
-            {resendSent
-              ? 'Verification email sent! Check your inbox, then sign in.'
-              : bannerErr
-            }
+            <span>{resendSent ? 'Verification email sent! Check your inbox, then sign in.' : bannerErr}</span>
             {unverified && !resendSent && (
               <div style={{ marginTop: 8 }}>
                 <button
@@ -148,11 +136,10 @@ const LoginForm: React.FC<Props> = ({ onSwitch }) => {
                   disabled={resendLoading}
                   onClick={handleResend}
                   style={{
-                    background: 'none', border: '1px solid currentColor',
-                    borderRadius: 6, padding: '3px 10px', fontSize: 11.5,
+                    background: 'none', border: '1px solid currentColor', borderRadius: 6,
+                    padding: '3px 10px', fontSize: 11.5,
                     cursor: resendLoading ? 'not-allowed' : 'pointer',
-                    color: 'inherit', fontFamily: 'inherit',
-                    opacity: resendLoading ? 0.6 : 1,
+                    color: 'inherit', fontFamily: 'inherit', opacity: resendLoading ? 0.6 : 1,
                   }}
                 >
                   {resendLoading ? 'Sending…' : 'Resend verification email'}
@@ -164,7 +151,6 @@ const LoginForm: React.FC<Props> = ({ onSwitch }) => {
       )}
 
       <form onSubmit={handleSubmit} noValidate>
-        {/* Email */}
         <div className="field">
           <label className="field-label">Email address</label>
           <div className="input-wrap">
@@ -180,10 +166,9 @@ const LoginForm: React.FC<Props> = ({ onSwitch }) => {
               autoFocus
             />
           </div>
-          {emailErr && <div className="field-error"><XCircle />{emailErr}</div>}
+          {emailErr && <div className="field-error"><XIcon />{emailErr}</div>}
         </div>
 
-        {/* Password */}
         <div className="field">
           <label className="field-label">Password</label>
           <div className="input-wrap">
@@ -201,7 +186,7 @@ const LoginForm: React.FC<Props> = ({ onSwitch }) => {
               <EyeIcon open={showPw} />
             </button>
           </div>
-          {passwordErr && <div className="field-error"><XCircle />{passwordErr}</div>}
+          {passwordErr && <div className="field-error"><XIcon />{passwordErr}</div>}
         </div>
 
         <div style={{ textAlign: 'right', marginTop: '-8px', marginBottom: '20px' }}>
