@@ -76,8 +76,14 @@ const LoginForm: React.FC<Props> = ({ onSwitch }) => {
       await login(email.trim().toLowerCase(), password);
     } catch (err: any) {
       const code: string = err instanceof AuthError ? err.code : (err?.code ?? '');
+
       if (code === 'auth/invalid-email-format' || code === 'auth/invalid-email') {
         setEmailErr('Please enter a valid email address (e.g. name@example.com).');
+      } else if (code === 'auth/invalid-credentials') {
+        // Firebase Email Enumeration Protection is ON — can't distinguish
+        // "wrong email" from "wrong password", so we show both fields as potentially wrong.
+        setEmailErr('No account found with this email, or the password is incorrect.');
+        setPasswordErr('Please double-check and try again, or reset your password below.');
       } else if (code === 'auth/user-not-found') {
         setEmailErr('No account found with this email address.');
       } else if (code === 'auth/wrong-password') {
