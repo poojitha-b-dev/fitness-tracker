@@ -16,24 +16,60 @@ import { auth, db } from "../config/firebase";
 
 export const SITE_URL = "https://myfittrackr.vercel.app";
 
-// ─── Email format validator ────────────────────────────────────────────────────
-// Accepts: gmail.com, hotmail.com, outlook.com, yahoo.com, any valid domain
-// Rejects: missing @, missing dot in domain, missing TLD, spaces, consecutive dots
+// ─── Firebase project API key (same one used in firebase.ts) ─────────────────
+const FIREBASE_API_KEY = "AIzaSyB464UldkUwxEDPgXPfr8OJM7qYOhgpKkw";
+
+// ─── Email format validator ───────────────────────────────────────────────────
 export const isValidEmailFormat = (email: string): boolean => {
-  // Standard RFC-compliant email regex
   const re = /^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$/;
   if (!re.test(email)) return false;
-  if (email.includes("..")) return false;          // no consecutive dots
+  if (email.includes("..")) return false;
   if (email.startsWith(".") || email.endsWith(".")) return false;
   const [local, domain] = email.split("@");
   if (!local || local.length === 0) return false;
   if (!domain || !domain.includes(".")) return false;
   const tld = domain.split(".").pop() ?? "";
-  if (tld.length < 2) return false;               // TLD must be 2+ chars
+  if (tld.length < 2) return false;
   return true;
 };
 
-// ─── Custom AuthError class ────────────────────────────────────────────────────
+// ─── Reliable email existence check via Firebase Auth REST API ────────────────
+//
+// Firebase v10 client SDK returns auth/invalid-credential for BOTH wrong email
+// AND wrong password — making it impossible to distinguish client-side.
+//
+// Firebase's createAuthUri REST endpoint tells us which sign-in providers are
+// registered for a given email WITHOUT requiring authentication. This works for
+// ALL users (including those registered before any Firestore doc system).
+//
+// Returns: true  → email IS registered in Firebase Auth
+//          false → email is NOT registered
+//          null  → network/API error (treat as unknown, don't block the user)
+const checkEmailExistsInFirebase = async (email: string): Promise<boolean | null> => {
+  try {
+    const res = await fetch(
+      `https://identitytoolkit.googleapis.com/v1/accounts:createAuthUri?key=${FIREBASE_API_KEY}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          identifier: email,
+          continueUri: SITE_URL,
+        }),
+      }
+    );
+    if (!res.ok) return null; // API error — be safe, don't block
+    const data = await res.json();
+    // registered: true if the email has at least one sign-in provider
+    return Array.isArray(data.allProviders)
+      ? data.allProviders.length > 0
+      : data.registered === true;
+  } catch {
+    return null; // Network error — be safe
+  }
+};
+
+// ─── Custom AuthError class ───────────────────────────────────────────────────
 export type AuthErrorCode =
   | "auth/invalid-email-format"
   | "auth/user-not-found"
@@ -55,7 +91,7 @@ export class AuthError extends Error {
   }
 }
 
-// ─── Types ─────────────────────────────────────────────────────────────────────
+// ─── Types ────────────────────────────────────────────────────────────────────
 export interface AuthUser extends User {
   username?: string;
 }
@@ -74,31 +110,9 @@ interface AuthContextType {
 
 export const AuthContext = createContext<AuthContextType | null>(null);
 
-// ─── Firestore email existence check ──────────────────────────────────────────
-// This is the ONLY reliable way with Firebase v10 client SDK.
-// Firebase v10 returns auth/invalid-credential for BOTH wrong email and
-// wrong password — making it impossible to distinguish via Auth alone.
-//
-// Solution: we maintain a "registeredEmails/{email}" collection in Firestore.
-// On register → write the doc. On login/reset → read the doc first.
-// If the doc doesn't exist → email was never registered.
-//
-// For users who registered before this system: after a successful login
-// we back-fill their email doc so future lookups work.
+// ─── Firestore helpers (kept for back-compat, non-critical) ──────────────────
 const emailDocRef = (email: string) =>
   doc(db, "registeredEmails", email.replace(/\./g, ","));
-  // Firestore doc IDs can't contain dots — replace with comma as safe encoding
-
-const checkEmailRegistered = async (email: string): Promise<boolean> => {
-  try {
-    const snap = await getDoc(emailDocRef(email));
-    return snap.exists();
-  } catch {
-    // Firestore unreachable — fall back to allowing the attempt
-    // (Firebase Auth will give us the real error)
-    return true;
-  }
-};
 
 const writeEmailDoc = async (email: string, uid: string): Promise<void> => {
   try {
@@ -106,7 +120,7 @@ const writeEmailDoc = async (email: string, uid: string): Promise<void> => {
   } catch { /* non-critical */ }
 };
 
-// ─── useAuthState ──────────────────────────────────────────────────────────────
+// ─── useAuthState ─────────────────────────────────────────────────────────────
 export const useAuthState = () => {
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
@@ -152,7 +166,7 @@ export const useAuthState = () => {
       .forEach((k) => localStorage.removeItem(k));
   };
 
-  // ── LOGIN ───────────────────────────────────────────────────────────────────
+  // ── LOGIN ──────────────────────────────────────────────────────────────────
   const login = async (email: string, password: string): Promise<void> => {
     const normalEmail = email.trim().toLowerCase();
 
@@ -161,18 +175,17 @@ export const useAuthState = () => {
       throw new AuthError("auth/invalid-email-format", "Please enter a valid email address.");
     }
 
-    // 2. Attempt sign-in directly with Firebase Auth
+    // 2. Attempt Firebase sign-in
     let credential;
     try {
       credential = await signInWithEmailAndPassword(auth, normalEmail, password);
     } catch (e: any) {
       const code: string = e?.code ?? "";
 
-      // Unambiguous — email not found
+      // Still handle legacy unambiguous codes (older SDK / emulator)
       if (code === "auth/user-not-found" || code === "auth/invalid-email") {
         throw new AuthError("auth/user-not-found", "No account exists with this email address.");
       }
-      // Unambiguous — wrong password
       if (code === "auth/wrong-password") {
         throw new AuthError("auth/wrong-password", "Incorrect password. Please try again.");
       }
@@ -183,21 +196,27 @@ export const useAuthState = () => {
         throw new AuthError("auth/network-request-failed", "Network error. Please check your connection.");
       }
 
-      // Firebase v10: auth/invalid-credential = ambiguous (wrong email OR wrong password)
-      // Use Firestore to distinguish — if no doc exists it's definitely not registered
+      // Firebase v10: auth/invalid-credential is ambiguous —
+      // use the REST API to check if the email actually exists
       if (code === "auth/invalid-credential") {
-        const registered = await checkEmailRegistered(normalEmail);
-        if (!registered) {
+        const exists = await checkEmailExistsInFirebase(normalEmail);
+
+        if (exists === false) {
+          // Definitively not registered
           throw new AuthError("auth/user-not-found", "No account exists with this email address.");
         }
-        // Doc exists → email is real → wrong password
-        throw new AuthError("auth/wrong-password", "Incorrect password. Please try again.");
+        if (exists === true) {
+          // Email is registered → must be wrong password
+          throw new AuthError("auth/wrong-password", "Incorrect password. Please try again.");
+        }
+        // exists === null → REST API failed (network issue); give neutral error
+        throw new AuthError("auth/unknown", "Sign-in failed. Please check your details and try again.");
       }
 
       throw new AuthError(code || "auth/unknown", "Sign-in failed. Please try again.");
     }
 
-    // 3. Back-fill email doc for existing users (safe, non-blocking)
+    // 3. Back-fill email doc for existing users (non-blocking, best-effort)
     writeEmailDoc(normalEmail, credential.user.uid);
 
     // 4. Block unverified users
@@ -211,7 +230,7 @@ export const useAuthState = () => {
     }
   };
 
-  // ── REGISTER ────────────────────────────────────────────────────────────────
+  // ── REGISTER ───────────────────────────────────────────────────────────────
   const register = async (email: string, password: string, username: string): Promise<void> => {
     const normalEmail    = email.trim().toLowerCase();
     const normalUsername = username.trim().toLowerCase();
@@ -221,7 +240,7 @@ export const useAuthState = () => {
       throw new AuthError("auth/invalid-email-format", "Please enter a valid email address.");
     }
 
-    // 2. Check username uniqueness
+    // 2. Check username uniqueness in Firestore
     try {
       const usernameSnap = await getDoc(doc(db, "usernames", normalUsername));
       if (usernameSnap.exists()) {
@@ -232,7 +251,7 @@ export const useAuthState = () => {
       throw new AuthError("auth/network-request-failed", "Network error. Please check your connection.");
     }
 
-    // 3. Create Firebase Auth account — Firebase itself checks email uniqueness
+    // 3. Create Firebase Auth account
     let credential;
     try {
       credential = await createUserWithEmailAndPassword(auth, normalEmail, password);
@@ -268,7 +287,6 @@ export const useAuthState = () => {
         createdAt:   serverTimestamp(),
       });
       await setDoc(doc(db, "usernames", normalUsername), { uid: user.uid });
-      // Write the email lookup doc — critical for login/reset checks
       await writeEmailDoc(normalEmail, user.uid);
     } catch { /* silent — auth still works without Firestore */ }
 
@@ -280,17 +298,17 @@ export const useAuthState = () => {
       });
     } catch { /* non-critical */ }
 
-    // 7. Sign out — must verify before entering app
+    // 7. Sign out — user must verify before entering the app
     await signOut(auth);
   };
 
-  // ── LOGOUT ──────────────────────────────────────────────────────────────────
+  // ── LOGOUT ─────────────────────────────────────────────────────────────────
   const logout = async (): Promise<void> => {
     clearAll();
     await signOut(auth);
   };
 
-  // ── RESET PASSWORD ──────────────────────────────────────────────────────────
+  // ── RESET PASSWORD ─────────────────────────────────────────────────────────
   const resetPassword = async (email: string): Promise<void> => {
     const normalEmail = email.trim().toLowerCase();
 
@@ -299,23 +317,26 @@ export const useAuthState = () => {
       throw new AuthError("auth/invalid-email-format", "Please enter a valid email address.");
     }
 
-    // 2. Try sending reset email directly
-    // Firebase v10 silently succeeds even for non-existent emails,
-    // so we catch that case using Firestore as fallback
+    // 2. Check if email is actually registered BEFORE sending the reset email.
+    //    We check first so we never send to non-existent addresses.
+    //    Use the REST API — works for ALL users including existing ones.
+    const exists = await checkEmailExistsInFirebase(normalEmail);
+
+    if (exists === false) {
+      // Definitively not registered — don't send email
+      throw new AuthError("auth/user-not-found", "No account exists with this email address.");
+    }
+    // exists === null means the REST check failed (network). We'll still attempt
+    // to send — Firebase will handle it gracefully.
+
+    // 3. Send reset email
     try {
       await sendPasswordResetEmail(auth, normalEmail, {
         url: `${SITE_URL}/`,
         handleCodeInApp: false,
       });
-      // If Firebase threw user-not-found (older SDK) we'd catch below.
-      // For v10 silent success, verify with Firestore.
-      const registered = await checkEmailRegistered(normalEmail);
-      if (!registered) {
-        throw new AuthError("auth/user-not-found", "No account exists with this email address.");
-      }
-      // Email exists — reset was sent successfully
     } catch (e: any) {
-      if (e instanceof AuthError) throw e; // re-throw our own errors
+      if (e instanceof AuthError) throw e;
       const code: string = e?.code ?? "";
       if (code === "auth/user-not-found" || code === "auth/invalid-email") {
         throw new AuthError("auth/user-not-found", "No account exists with this email address.");
@@ -343,7 +364,7 @@ export const useAuthState = () => {
   };
 };
 
-// ─── Hook ──────────────────────────────────────────────────────────────────────
+// ─── Hook ─────────────────────────────────────────────────────────────────────
 export const useAuth = () => {
   const ctx = useContext(AuthContext);
   if (!ctx) throw new Error("useAuth must be used within AuthProvider");
