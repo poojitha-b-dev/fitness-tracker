@@ -167,18 +167,23 @@ export const useAuthState = () => {
       throw new AuthError("auth/invalid-email-format", "Please enter a valid email address.");
     }
 
-    // Step 2: attempt sign-in
+    // Step 2: check email exists BEFORE attempting password
+    const exists = await emailExistsInAuth(normalEmail);
+    if (!exists) {
+      throw new AuthError("auth/user-not-found", "No account found with this email address.");
+    }
+
+    // Step 3: email exists — now attempt sign-in to validate password
     let credential;
     try {
       credential = await signInWithEmailAndPassword(auth, normalEmail, password);
     } catch (e: any) {
       const code: string = e?.code ?? "";
-
-      // Unambiguous codes
-      if (code === "auth/user-not-found" || code === "auth/invalid-email") {
-        throw new AuthError("auth/user-not-found", "No account found with this email address.");
-      }
-      if (code === "auth/wrong-password") {
+      // Email exists so any failure here is a wrong password
+      if (
+        code === "auth/wrong-password" ||
+        code === "auth/invalid-credential"
+      ) {
         throw new AuthError("auth/wrong-password", "Incorrect password. Please try again.");
       }
       if (code === "auth/too-many-requests") {
@@ -187,20 +192,10 @@ export const useAuthState = () => {
       if (code === "auth/network-request-failed") {
         throw new AuthError("auth/network-request-failed", "Network error. Please check your connection.");
       }
-
-      // Firebase v10 invalid-credential: probe to distinguish
-      if (code === "auth/invalid-credential") {
-        const exists = await emailExistsInAuth(normalEmail);
-        if (!exists) {
-          throw new AuthError("auth/user-not-found", "No account found with this email address.");
-        }
-        throw new AuthError("auth/wrong-password", "Incorrect password. Please try again.");
-      }
-
       throw new AuthError(code || "auth/unknown", "Sign-in failed. Please check your details.");
     }
 
-    // Step 3: gate on email verification
+    // Step 4: gate on email verification
     const user = credential.user;
     if (!user.emailVerified) {
       await signOut(auth);
@@ -297,7 +292,15 @@ export const useAuthState = () => {
       throw new AuthError("auth/invalid-email-format", "Please enter a valid email address.");
     }
 
-    // Step 2: send reset — Firebase throws user-not-found if email isn't registered
+    // Step 2: check email exists BEFORE sending reset
+    // Firebase v10 no longer throws user-not-found — it silently succeeds
+    // even for non-existent emails, so we must probe first.
+    const exists = await emailExistsInAuth(normalEmail);
+    if (!exists) {
+      throw new AuthError("auth/user-not-found", "No account found with this email address.");
+    }
+
+    // Step 3: email confirmed to exist — send the reset link
     try {
       await sendPasswordResetEmail(auth, normalEmail, {
         url: `${SITE_URL}/`,
@@ -305,9 +308,6 @@ export const useAuthState = () => {
       });
     } catch (e: any) {
       const code: string = e?.code ?? "";
-      if (code === "auth/user-not-found" || code === "auth/invalid-email") {
-        throw new AuthError("auth/user-not-found", "No account found with this email address.");
-      }
       if (code === "auth/too-many-requests") {
         throw new AuthError("auth/too-many-requests", "Too many requests. Please wait a few minutes.");
       }
