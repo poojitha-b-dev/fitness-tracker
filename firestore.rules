@@ -2,14 +2,20 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // User profile — only the owner can read/write
+    // User profile — owner only
     match /users/{userId} {
       allow read, write: if request.auth != null && request.auth.uid == userId;
     }
 
-    // Username index — anyone can read (availability checks during registration)
-    // Only authenticated users can write (set on registration)
+    // Username index — public read for availability checks, auth write only
     match /usernames/{username} {
+      allow read: if true;
+      allow write: if request.auth != null;
+    }
+
+    // Email lookup index — public read so login/reset can check existence
+    // before authenticating. Write only by authenticated users (on register/login).
+    match /registeredEmails/{emailKey} {
       allow read: if true;
       allow write: if request.auth != null;
     }
