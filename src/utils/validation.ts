@@ -52,25 +52,48 @@ export const isPasswordAcceptable = (password: string): boolean => {
 
 // ─── Email Validation ────────────────────────────────────────────────────────
 
-// Well-known consumer providers that must match EXACTLY.
-// Any domain that contains these brand names but doesn't match exactly
-// (e.g. gmail.co, gmail.om, gmailcom, gmal.com) is rejected as invalid format.
-const FIXED_DOMAINS: string[] = [
-  "gmail.com",
-  "hotmail.com",
-  "yahoo.com",
-  "outlook.com",
-];
+// The four fixed consumer providers — domain must match one of these EXACTLY.
+const _FIXED_DOMAINS = ["gmail.com", "hotmail.com", "yahoo.com", "outlook.com"];
 
-// Brand-name substrings used to catch typos like "gmailcom", "yahooo.com", etc.
-// If the domain contains one of these substrings but is NOT in FIXED_DOMAINS,
-// it is treated as a typo/invalid format rather than a custom domain.
-const FIXED_BRAND_PATTERNS: RegExp[] = [
-  /gmail/,
-  /hotmail/,
-  /yahoo/,
-  /outlook/,
-];
+// Regex patterns that match if ANY of the brand names appear anywhere in the domain
+// (catches gmail.cm, gmailcom, outlookcom, yahooo.com, etc.)
+const _BRAND_PATTERNS = [/gmail/, /hotmail/, /yahoo/, /outlook/];
+
+// Brand name strings used for edit-distance check on the first domain label
+// (catches gmil.com, gmal.com, hotmial.com, yaho.com, etc.)
+const _BRAND_NAMES = ["gmail", "hotmail", "yahoo", "outlook"];
+
+// Legitimate domains whose first label happens to be close to a brand name
+const _DOMAIN_WHITELIST = ["mail.com", "mail.ru", "ymail.com", "live.com", "msn.com"];
+
+// Levenshtein distance between two strings
+const _lev = (a: string, b: string): number => {
+  const m = a.length, n = b.length;
+  const dp: number[][] = Array.from({ length: m + 1 }, (_, i) =>
+    Array.from({ length: n + 1 }, (_, j) => (i === 0 ? j : j === 0 ? i : 0))
+  );
+  for (let i = 1; i <= m; i++)
+    for (let j = 1; j <= n; j++)
+      dp[i][j] = a[i-1] === b[j-1]
+        ? dp[i-1][j-1]
+        : 1 + Math.min(dp[i-1][j], dp[i][j-1], dp[i-1][j-1]);
+  return dp[m][n];
+};
+
+const _isTypoOfFixedDomain = (domain: string): boolean => {
+  if (_FIXED_DOMAINS.includes(domain)) return false;   // exact match → valid, not a typo
+  if (_DOMAIN_WHITELIST.includes(domain)) return false; // whitelisted legit domain
+
+  // Check 1: brand name appears anywhere in the domain string (gmail.cm, gmailcom…)
+  if (_BRAND_PATTERNS.some(p => p.test(domain))) return true;
+
+  // Check 2: first label (before first dot) is within edit-distance 2 of a brand name
+  // (gmil.com, gmal.com, hotmial.com, yaho.com…)
+  const firstLabel = domain.split(".")[0];
+  if (_BRAND_NAMES.some(b => _lev(firstLabel, b) <= 2)) return true;
+
+  return false;
+};
 
 export const isValidEmail = (email: string): boolean => {
   const trimmed = email.trim().toLowerCase();
@@ -78,48 +101,40 @@ export const isValidEmail = (email: string): boolean => {
   // Must have exactly one @
   const atParts = trimmed.split("@");
   if (atParts.length !== 2) return false;
-
   const [local, domain] = atParts;
   if (!local || !domain) return false;
 
-  // Basic structure check
+  // Basic structural check
   const re = /^[a-zA-Z0-9_%+\-]+(\.[a-zA-Z0-9_%+\-]+)*@[a-zA-Z0-9\-]+(\.[a-zA-Z0-9\-]+)*\.[a-zA-Z]{2,}$/;
   if (!re.test(trimmed)) return false;
 
-  // No consecutive dots anywhere
+  // No consecutive dots
   if (trimmed.includes("..")) return false;
 
-  // Local part cannot start or end with a dot
+  // Local part rules
   if (local.startsWith(".") || local.endsWith(".")) return false;
 
-  // Domain cannot start or end with a dot or hyphen
+  // Domain rules
   if (domain.startsWith(".") || domain.endsWith(".")) return false;
   if (domain.startsWith("-") || domain.endsWith("-")) return false;
-
-  // Must have at least one dot in domain
   if (!domain.includes(".")) return false;
 
-  // TLD must be 2+ alpha chars only
+  // TLD must be 2+ alpha chars
   const tld = domain.split(".").pop() ?? "";
   if (!/^[a-zA-Z]{2,}$/.test(tld)) return false;
 
-  // ── Fixed-domain strict check ──────────────────────────────────────────────
-  // If the domain looks like a well-known provider (contains the brand name)
-  // it MUST match the exact known domain — no typos allowed.
-  const looksLikeFixedBrand = FIXED_BRAND_PATTERNS.some(p => p.test(domain));
-  if (looksLikeFixedBrand && !FIXED_DOMAINS.includes(domain)) {
-    return false; // e.g. gmail.co, gmail.om, gmailcom, gmal.com → invalid
-  }
+  // Typo-of-fixed-domain check — must come BEFORE the DB check
+  if (_isTypoOfFixedDomain(domain)) return false;
 
   // Block disposable/throwaway domains
-  const disposableDomains = [
+  const disposable = [
     "mailinator.com", "guerrillamail.com", "tempmail.com", "throwaway.email",
     "yopmail.com", "sharklasers.com", "guerrillamailblock.com", "grr.la",
     "guerrillamail.info", "spam4.me", "trashmail.com", "dispostable.com",
     "maildrop.cc", "fakeinbox.com", "getairmail.com", "filzmail.com",
     "discard.email", "spamgourmet.com", "mailnull.com", "spamcorpse.com",
   ];
-  if (disposableDomains.includes(domain)) return false;
+  if (disposable.includes(domain)) return false;
 
   return true;
 };

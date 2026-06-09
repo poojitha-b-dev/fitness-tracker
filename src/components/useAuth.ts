@@ -12,16 +12,38 @@ export const SITE_URL = "https://myfittrackr.vercel.app";
 
 // ─── Email format validator ───────────────────────────────────────────────────
 
-// Well-known consumer providers — domain must match EXACTLY.
-const _FIXED_DOMAINS = ["gmail.com", "hotmail.com", "yahoo.com", "outlook.com"];
-const _FIXED_BRAND_PATTERNS = [/gmail/, /hotmail/, /yahoo/, /outlook/];
+const _FMT_FIXED_DOMAINS = ["gmail.com", "hotmail.com", "yahoo.com", "outlook.com"];
+const _FMT_BRAND_PATTERNS = [/gmail/, /hotmail/, /yahoo/, /outlook/];
+const _FMT_BRAND_NAMES    = ["gmail", "hotmail", "yahoo", "outlook"];
+const _FMT_WHITELIST      = ["mail.com", "mail.ru", "ymail.com", "live.com", "msn.com"];
+
+const _fmtLev = (a: string, b: string): number => {
+  const m = a.length, n = b.length;
+  const dp: number[][] = Array.from({ length: m + 1 }, (_, i) =>
+    Array.from({ length: n + 1 }, (_, j) => (i === 0 ? j : j === 0 ? i : 0))
+  );
+  for (let i = 1; i <= m; i++)
+    for (let j = 1; j <= n; j++)
+      dp[i][j] = a[i-1] === b[j-1]
+        ? dp[i-1][j-1]
+        : 1 + Math.min(dp[i-1][j], dp[i][j-1], dp[i-1][j-1]);
+  return dp[m][n];
+};
+
+const _fmtIsTypo = (domain: string): boolean => {
+  if (_FMT_FIXED_DOMAINS.includes(domain)) return false;
+  if (_FMT_WHITELIST.includes(domain)) return false;
+  if (_FMT_BRAND_PATTERNS.some(p => p.test(domain))) return true;
+  const first = domain.split(".")[0];
+  if (_FMT_BRAND_NAMES.some(b => _fmtLev(first, b) <= 2)) return true;
+  return false;
+};
 
 export const isValidEmailFormat = (email: string): boolean => {
   const trimmed = email.trim().toLowerCase();
 
   const atParts = trimmed.split("@");
   if (atParts.length !== 2) return false;
-
   const [local, domain] = atParts;
   if (!local || !domain) return false;
 
@@ -37,9 +59,7 @@ export const isValidEmailFormat = (email: string): boolean => {
   const tld = domain.split(".").pop() ?? "";
   if (!/^[a-zA-Z]{2,}$/.test(tld)) return false;
 
-  // If domain looks like a known provider brand but isn't an exact match → invalid
-  const looksLikeFixedBrand = _FIXED_BRAND_PATTERNS.some(p => p.test(domain));
-  if (looksLikeFixedBrand && !_FIXED_DOMAINS.includes(domain)) return false;
+  if (_fmtIsTypo(domain)) return false;
 
   const blocked = [
     "mailinator.com","guerrillamail.com","tempmail.com","throwaway.email",
