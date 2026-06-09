@@ -12,23 +12,30 @@ export const SITE_URL = "https://myfittrackr.vercel.app";
 
 // ─── Email format validator ───────────────────────────────────────────────────
 export const isValidEmailFormat = (email: string): boolean => {
-  const re = /^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$/;
-  if (!re.test(email)) return false;
-  if (email.includes("..")) return false;
-  if (email.startsWith(".") || email.endsWith(".")) return false;
-  const [local, domain] = email.split("@");
-  if (!local) return false;
-  if (!domain || !domain.includes(".")) return false;
-  const tld = domain.split(".").pop() ?? "";
-  if (tld.length < 2) return false;
+  const trimmed = email.trim().toLowerCase();
 
-  // Block disposable domains
+  const re = /^[a-zA-Z0-9_%+\-]+(\.[a-zA-Z0-9_%+\-]+)*@[a-zA-Z0-9\-]+(\.[a-zA-Z0-9\-]+)*\.[a-zA-Z]{2,}$/;
+  if (!re.test(trimmed)) return false;
+
+  const [local, domain] = trimmed.split("@");
+  if (!local || !domain) return false;
+
+  if (trimmed.includes("..")) return false;
+  if (local.startsWith(".") || local.endsWith(".")) return false;
+  if (domain.startsWith(".") || domain.endsWith(".")) return false;
+  if (domain.startsWith("-") || domain.endsWith("-")) return false;
+  if (!domain.includes(".")) return false;
+
+  const tld = domain.split(".").pop() ?? "";
+  if (!/^[a-zA-Z]{2,}$/.test(tld)) return false;
+
   const blocked = [
     "mailinator.com","guerrillamail.com","tempmail.com","throwaway.email",
     "yopmail.com","trashmail.com","dispostable.com","maildrop.cc",
     "fakeinbox.com","spam4.me","getairmail.com","discard.email",
   ];
-  if (blocked.includes(domain.toLowerCase())) return false;
+  if (blocked.includes(domain)) return false;
+
   return true;
 };
 
@@ -78,6 +85,15 @@ const emailDocRef = (email: string) =>
 const writeEmailDoc = async (email: string, uid: string) => {
   try { await setDoc(emailDocRef(email), { uid, createdAt: serverTimestamp() }); }
   catch { /* non-critical */ }
+};
+
+const emailExists = async (email: string): Promise<boolean> => {
+  try {
+    const snap = await getDoc(emailDocRef(email));
+    return snap.exists();
+  } catch {
+    return false;
+  }
 };
 
 // ─── useAuthState ─────────────────────────────────────────────────────────────
@@ -142,17 +158,16 @@ export const useAuthState = () => {
       if (code === "auth/network-request-failed")
         throw new AuthError("auth/network-request-failed", "Network error. Check your connection.");
 
-      // These two codes are unambiguous (older SDK / emulator / protection OFF)
-      if (code === "auth/user-not-found")
-        throw new AuthError("auth/user-not-found", "No account found with this email.");
+      // With Email Enumeration Protection OFF these two are distinct:
+      if (code === "auth/user-not-found" || code === "auth/invalid-email")
+        throw new AuthError("auth/user-not-found", "Account not found.");
       if (code === "auth/wrong-password")
         throw new AuthError("auth/wrong-password", "Incorrect password.");
 
-      // auth/invalid-credential = Firebase v10 with Email Enumeration Protection ON
-      // Both "wrong email" and "wrong password" come here — we cannot tell them apart.
-      // Fix: Firebase Console → Authentication → Settings → User actions
-      //      → disable "Email enumeration protection"
-      // Until then we show a combined message.
+      // auth/invalid-credential fires when Email Enumeration Protection is ON
+      // (both wrong-email and wrong-password collapse into one code).
+      // Protection is currently OFF for this project, but we keep this as a
+      // safe fallback in case it ever gets re-enabled.
       if (code === "auth/invalid-credential")
         throw new AuthError("auth/ambiguous-credentials", "Incorrect email or password.");
 
@@ -231,24 +246,18 @@ export const useAuthState = () => {
     if (!isValidEmailFormat(e))
       throw new AuthError("auth/invalid-email-format", "Invalid email.");
 
-    // Check Firestore doc — reliable for users registered via this app.
-    // If doc doesn't exist it could be an old user (no doc) so we still attempt.
-    // When Email Enumeration Protection is OFF, Firebase will throw user-not-found
-    // for real non-existent emails, which we catch below.
-    try {
-      const snap = await getDoc(emailDocRef(e));
-      if (!snap.exists()) {
-        // No Firestore doc. Could be old user — attempt send anyway.
-        // If protection is OFF, Firebase will throw if email not registered.
-      }
-    } catch { /* network issue — fall through and try */ }
+    // Check Firestore first — only send reset to known registered accounts.
+    const exists = await emailExists(e);
+    if (!exists) {
+      throw new AuthError("auth/user-not-found", "Account not found.");
+    }
 
     try {
       await sendPasswordResetEmail(auth, e, { url: `${SITE_URL}/`, handleCodeInApp: false });
     } catch (err: any) {
       const code: string = err?.code ?? "";
       if (code === "auth/user-not-found" || code === "auth/invalid-email")
-        throw new AuthError("auth/user-not-found", "No account found with this email.");
+        throw new AuthError("auth/user-not-found", "Account not found.");
       if (code === "auth/too-many-requests")
         throw new AuthError("auth/too-many-requests", "Too many requests. Please wait.");
       if (code === "auth/network-request-failed")

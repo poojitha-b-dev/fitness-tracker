@@ -230,3 +230,113 @@ fitness-tracker
 └─ vite.config.ts
 
 ```
+```
+fitness-tracker
+├─ .firebaserc
+├─ eslint.config.js
+├─ firebase.json
+├─ firestore.indexes.json
+├─ firestore.rules
+├─ index.html
+├─ INTEGRATION.md
+├─ netlify.toml
+├─ package-lock.json
+├─ package.json
+├─ postcss.config.js
+├─ README.md
+├─ src
+│  ├─ App.tsx
+│  ├─ assets
+│  │  └─ logo.svg
+│  ├─ components
+│  │  ├─ Dashboard.tsx
+│  │  ├─ ForgotPasswordForm.tsx
+│  │  ├─ Goals.tsx
+│  │  ├─ HealthMetrics.tsx
+│  │  ├─ LoginForm.tsx
+│  │  ├─ Navigation.tsx
+│  │  ├─ NumericInput.tsx
+│  │  ├─ NutritionTracker.tsx
+│  │  ├─ Profile.tsx
+│  │  ├─ Progress.tsx
+│  │  ├─ RegisterForm.tsx
+│  │  ├─ useAuth.ts
+│  │  └─ WorkoutTracker.tsx
+│  ├─ config
+│  │  └─ firebase.ts
+│  ├─ data
+│  │  ├─ exercises.ts
+│  │  └─ foods.ts
+│  ├─ hooks
+│  │  └─ AuthPage.tsx
+│  ├─ index.css
+│  ├─ main.tsx
+│  ├─ types
+│  │  └─ index.ts
+│  ├─ utils
+│  │  ├─ calculations.ts
+│  │  ├─ storage.ts
+│  │  └─ validation.ts
+│  └─ vite-env.d.ts
+├─ tailwind.config.js
+├─ tsconfig.app.json
+├─ tsconfig.json
+├─ tsconfig.node.json
+└─ vite.config.ts
+
+```
+```
+fitness-tracker
+├─ .firebaserc
+├─ eslint.config.js
+├─ firebase.json
+├─ firestore.indexes.json
+├─ firestore.rules
+├─ index.html
+├─ INTEGRATION.md
+├─ netlify.toml
+├─ package-lock.json
+├─ package.json
+├─ postcss.config.js
+├─ README.md
+├─ src
+│  ├─ App.tsx
+│  ├─ assets
+│  │  └─ logo.svg
+│  ├─ components
+│  │  ├─ Dashboard.tsx
+│  │  ├─ ForgotPasswordForm.tsx
+│  │  ├─ Goals.tsx
+│  │  ├─ HealthMetrics.tsx
+│  │  ├─ LoginForm.tsx
+│  │  ├─ Navigation.tsx
+│  │  ├─ NumericInput.tsx
+│  │  ├─ NutritionTracker.tsx
+│  │  ├─ Profile.tsx
+│  │  ├─ Progress.tsx
+│  │  ├─ RegisterForm.tsx
+│  │  ├─ useAuth.ts
+│  │  └─ WorkoutTracker.tsx
+│  ├─ config
+│  │  └─ firebase.ts
+│  ├─ data
+│  │  ├─ exercises.ts
+│  │  └─ foods.ts
+│  ├─ hooks
+│  │  └─ AuthPage.tsx
+│  ├─ index.css
+│  ├─ main.tsx
+│  ├─ types
+│  │  └─ index.ts
+│  ├─ utils
+│  │  ├─ calculations.ts
+│  │  ├─ storage.ts
+│  │  └─ validation.ts
+│  └─ vite-env.d.ts
+├─ tailwind.config.js
+├─ tsconfig.app.json
+├─ tsconfig.json
+├─ tsconfig.node.json
+└─ vite.config.ts
+
+```

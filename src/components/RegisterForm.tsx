@@ -77,7 +77,9 @@ const StrengthBar: React.FC<{ password: string }> = ({ password }) => {
       </div>
       <div style={{ display: 'flex', justifyContent: 'space-between' }}>
         <span style={{ color: a.color, fontSize: '11.5px', fontWeight: 500 }}>{a.label}</span>
-        {a.strength === 'weak' && <span style={{ color: '#6b7280', fontSize: '11px' }}>Not accepted</span>}
+        {a.strength === 'weak' && (
+          <span style={{ color: '#6b7280', fontSize: '11px' }}>Not accepted</span>
+        )}
       </div>
       {a.tips.length > 0 && (
         <div className="strength-tips">
@@ -104,7 +106,7 @@ const VerifyEmailScreen: React.FC<{ email: string; onSwitch: (v: AuthView) => vo
     </p>
     <p className="verify-text" style={{ marginTop: -12 }}>
       Click the link in that email to activate your account.
-      Once verified, you'll be redirected back to sign in automatically.
+      Once verified, you can sign in.
     </p>
     <p className="verify-text" style={{ fontSize: '12px', opacity: 0.65, marginTop: -12 }}>
       Can't find it? Check your spam folder.
@@ -140,31 +142,38 @@ const RegisterForm: React.FC<Props> = ({ onSwitch }) => {
 
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Username: format check → debounced Firestore availability check
+  // ── Username: format check → debounced Firestore availability check ─────────
   useEffect(() => {
     setUsernameOk(false);
     if (!username) { setUsernameErr(''); return; }
+
     const fmtErr = isValidUsername(username);
-    if (fmtErr) { setUsernameErr(fmtErr); return; }
+    if (fmtErr) { setUsernameErr(fmtErr); setChecking(false); return; }
+
     setUsernameErr('');
     setChecking(true);
     if (timer.current) clearTimeout(timer.current);
+
     timer.current = setTimeout(async () => {
       const avail = await isUsernameAvailable(username);
       setChecking(false);
-      if (!avail) setUsernameErr('This username is already taken.');
+      if (!avail) setUsernameErr('Username already taken.');
       else setUsernameOk(true);
     }, 600);
+
     return () => { if (timer.current) clearTimeout(timer.current); };
   }, [username]);
 
-  // Email: validate on blur
+  // ── Email: validate on blur ─────────────────────────────────────────────────
   const handleEmailBlur = () => {
-    if (email && !isValidEmail(email)) setEmailErr('Please enter a valid email address.');
-    else setEmailErr('');
+    if (email && !isValidEmail(email)) {
+      setEmailErr('Enter a valid email address.');
+    } else {
+      setEmailErr('');
+    }
   };
 
-  // Confirm: live match check
+  // ── Confirm: live match check ───────────────────────────────────────────────
   useEffect(() => {
     if (confirm && confirm !== password) setConfirmErr('Passwords do not match.');
     else setConfirmErr('');
@@ -181,6 +190,10 @@ const RegisterForm: React.FC<Props> = ({ onSwitch }) => {
     e.preventDefault();
     setBannerErr('');
     if (!canSubmit) return;
+
+    // Final client-side guard before submit
+    if (!isValidEmail(email)) { setEmailErr('Enter a valid email address.'); return; }
+
     setLoading(true);
     try {
       await register(email.trim().toLowerCase(), password, username.trim());
@@ -190,12 +203,12 @@ const RegisterForm: React.FC<Props> = ({ onSwitch }) => {
       if (code === 'auth/email-already-in-use') {
         setEmailErr('An account with this email already exists.');
       } else if (code === 'auth/username-taken') {
-        setUsernameErr('This username is already taken.');
+        setUsernameErr('Username already taken.');
         setUsernameOk(false);
       } else if (code === 'auth/weak-password') {
         setBannerErr('Password is too weak. Please choose a stronger one.');
       } else if (code === 'auth/invalid-email' || code === 'auth/invalid-email-format') {
-        setEmailErr('Please enter a valid email address.');
+        setEmailErr('Enter a valid email address.');
       } else if (code === 'auth/network-request-failed') {
         setBannerErr('Network error. Please check your connection.');
       } else {
@@ -223,7 +236,8 @@ const RegisterForm: React.FC<Props> = ({ onSwitch }) => {
       )}
 
       <form onSubmit={handleSubmit} noValidate>
-        {/* Username */}
+
+        {/* ── Username ── */}
         <div className="field">
           <label className="field-label">Username</label>
           <div className="input-wrap">
@@ -233,18 +247,28 @@ const RegisterForm: React.FC<Props> = ({ onSwitch }) => {
               className={`field-input ${usernameErr ? 'error' : usernameOk ? 'valid' : ''}`}
               placeholder="your_username"
               value={username}
-              onChange={e => setUsername(e.target.value)}
+              onChange={e => {
+                setUsername(e.target.value);
+                setUsernameOk(false);
+              }}
               autoComplete="username"
               disabled={loading}
               maxLength={20}
             />
           </div>
-          {checking && <div className="username-checking"><span className="mini-spinner" />Checking availability…</div>}
+          {checking && (
+            <div className="username-checking">
+              <span className="mini-spinner" />Checking availability…
+            </div>
+          )}
           {!checking && usernameErr && <div className="field-error"><XIcon />{usernameErr}</div>}
           {!checking && usernameOk  && <div className="field-success"><CheckIcon />Username is available!</div>}
+          <div style={{ fontSize: '11px', color: '#a0b0c0', marginTop: 4 }}>
+            Letters, numbers, underscores (_) and dots (.) · 3–20 characters
+          </div>
         </div>
 
-        {/* Email */}
+        {/* ── Email ── */}
         <div className="field">
           <label className="field-label">Email address</label>
           <div className="input-wrap">
@@ -263,7 +287,7 @@ const RegisterForm: React.FC<Props> = ({ onSwitch }) => {
           {emailErr && <div className="field-error"><XIcon />{emailErr}</div>}
         </div>
 
-        {/* Password */}
+        {/* ── Password ── */}
         <div className="field">
           <label className="field-label">Password</label>
           <div className="input-wrap">
@@ -284,7 +308,7 @@ const RegisterForm: React.FC<Props> = ({ onSwitch }) => {
           <StrengthBar password={password} />
         </div>
 
-        {/* Confirm */}
+        {/* ── Confirm password ── */}
         <div className="field">
           <label className="field-label">Confirm password</label>
           <div className="input-wrap">
@@ -302,8 +326,8 @@ const RegisterForm: React.FC<Props> = ({ onSwitch }) => {
               <EyeIcon open={showCf} />
             </button>
           </div>
-          {confirmErr             && <div className="field-error"><XIcon />{confirmErr}</div>}
-          {confirm && !confirmErr && <div className="field-success"><CheckIcon />Passwords match</div>}
+          {confirmErr              && <div className="field-error"><XIcon />{confirmErr}</div>}
+          {confirm && !confirmErr  && <div className="field-success"><CheckIcon />Passwords match</div>}
         </div>
 
         <button type="submit" className="submit-btn" disabled={!canSubmit}>

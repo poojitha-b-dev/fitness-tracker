@@ -35,7 +35,7 @@ const ForgotPasswordForm: React.FC<Props> = ({ onSwitch }) => {
   const [bannerErr, setBannerErr] = useState('');
   const [sent, setSent]           = useState(false);
 
-  // Validate on every keystroke so button enables only when valid
+  // Button is enabled only when email looks valid
   const emailValid = email.trim().length > 0 && isValidEmailFormat(email.trim().toLowerCase());
 
   const handleEmailChange = (val: string) => {
@@ -46,7 +46,7 @@ const ForgotPasswordForm: React.FC<Props> = ({ onSwitch }) => {
 
   const handleEmailBlur = () => {
     if (email.trim() && !isValidEmailFormat(email.trim().toLowerCase())) {
-      setEmailErr('Please enter a valid email address (e.g. name@example.com).');
+      setEmailErr('Enter a valid email address.');
     }
   };
 
@@ -54,22 +54,30 @@ const ForgotPasswordForm: React.FC<Props> = ({ onSwitch }) => {
     e.preventDefault();
     setEmailErr(''); setBannerErr('');
 
-    if (!email.trim()) { setEmailErr('Please enter your email address.'); return; }
+    if (!email.trim()) {
+      setEmailErr('Please enter your email address.');
+      return;
+    }
     if (!isValidEmailFormat(email.trim().toLowerCase())) {
-      setEmailErr('Please enter a valid email address (e.g. name@example.com).');
+      setEmailErr('Enter a valid email address.');
       return;
     }
 
     setLoading(true);
     try {
+      // resetPassword now checks Firestore first and throws auth/user-not-found
+      // if no account is registered — no reset email is sent to unknown addresses.
       await resetPassword(email.trim().toLowerCase());
       setSent(true);
     } catch (err: any) {
       const code: string = err instanceof AuthError ? err.code : (err?.code ?? '');
+
       if (code === 'auth/invalid-email-format' || code === 'auth/invalid-email') {
-        setEmailErr('Please enter a valid email address (e.g. name@example.com).');
+        // Field-level
+        setEmailErr('Enter a valid email address.');
       } else if (code === 'auth/user-not-found') {
-        setEmailErr('No account found with this email address.');
+        // Field-level — account not registered
+        setEmailErr('Account not found.');
       } else if (code === 'auth/too-many-requests') {
         setBannerErr('Too many requests. Please wait a few minutes and try again.');
       } else if (code === 'auth/network-request-failed') {
@@ -82,6 +90,7 @@ const ForgotPasswordForm: React.FC<Props> = ({ onSwitch }) => {
     }
   };
 
+  // ── Success screen ──────────────────────────────────────────────────────────
   if (sent) {
     return (
       <div className="verify-banner">
@@ -91,20 +100,34 @@ const ForgotPasswordForm: React.FC<Props> = ({ onSwitch }) => {
           </svg>
         </div>
         <div className="verify-title">Check your inbox</div>
-        <p className="verify-text">A password reset link has been sent to<br /><strong>{email}</strong></p>
-        <p className="verify-text" style={{ marginTop: -12 }}>Click the link to reset your password.</p>
-        <p className="verify-text" style={{ fontSize: '12px', opacity: 0.65, marginTop: -12 }}>Can't find it? Check your spam folder.</p>
-        <button className="submit-btn" style={{ marginTop: 0 }} onClick={() => onSwitch('login')}>Back to Sign In</button>
+        <p className="verify-text">
+          A password reset link has been sent to<br /><strong>{email}</strong>
+        </p>
+        <p className="verify-text" style={{ marginTop: -12 }}>
+          Click the link to reset your password.
+        </p>
+        <p className="verify-text" style={{ fontSize: '12px', opacity: 0.65, marginTop: -12 }}>
+          Can't find it? Check your spam folder.
+        </p>
+        <button className="submit-btn" style={{ marginTop: 0 }} onClick={() => onSwitch('login')}>
+          Back to Sign In
+        </button>
       </div>
     );
   }
 
+  // ── Form ────────────────────────────────────────────────────────────────────
   return (
     <div>
-      <button type="button" onClick={() => onSwitch('login')}
-        style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: 'none', border: 'none',
-          cursor: 'pointer', color: '#7a8fa6', fontSize: 13, padding: 0, marginBottom: 20,
-          fontFamily: 'inherit', transition: 'color 0.2s' }}
+      <button
+        type="button"
+        onClick={() => onSwitch('login')}
+        style={{
+          display: 'inline-flex', alignItems: 'center', gap: 6,
+          background: 'none', border: 'none', cursor: 'pointer',
+          color: '#7a8fa6', fontSize: 13, padding: 0, marginBottom: 20,
+          fontFamily: 'inherit', transition: 'color 0.2s',
+        }}
         onMouseEnter={e => (e.currentTarget.style.color = '#3b82f6')}
         onMouseLeave={e => (e.currentTarget.style.color = '#7a8fa6')}>
         <BackIcon /> Back to sign in
@@ -124,16 +147,25 @@ const ForgotPasswordForm: React.FC<Props> = ({ onSwitch }) => {
           <label className="field-label">Email address</label>
           <div className="input-wrap">
             <span className="input-icon"><MailIcon /></span>
-            <input type="email" className={`field-input ${emailErr ? 'error' : ''}`}
-              placeholder="you@example.com" value={email}
+            <input
+              type="email"
+              className={`field-input ${emailErr ? 'error' : ''}`}
+              placeholder="you@example.com"
+              value={email}
               onChange={e => handleEmailChange(e.target.value)}
               onBlur={handleEmailBlur}
-              autoComplete="email" disabled={loading} autoFocus />
+              autoComplete="email"
+              disabled={loading}
+              autoFocus
+            />
           </div>
           {emailErr && <div className="field-error"><XIcon />{emailErr}</div>}
         </div>
 
-        <button type="submit" className="submit-btn" style={{ marginTop: 8 }}
+        <button
+          type="submit"
+          className="submit-btn"
+          style={{ marginTop: 8 }}
           disabled={loading || !emailValid}>
           {loading ? <><span className="spinner" />Sending…</> : 'Send reset link'}
         </button>

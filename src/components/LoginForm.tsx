@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { sendEmailVerification, signInWithEmailAndPassword, signOut } from 'firebase/auth';
 import { auth } from '../config/firebase';
-import { useAuth, AuthError, SITE_URL } from './useAuth';
+import { useAuth, AuthError, isValidEmailFormat, SITE_URL } from './useAuth';
 import type { AuthView } from '../hooks/AuthPage';
 
 const MailIcon = () => (
@@ -47,9 +47,12 @@ const LoginForm: React.FC<Props> = ({ onSwitch }) => {
   const [showPw, setShowPw]     = useState(false);
   const [loading, setLoading]   = useState(false);
 
+  // Field-level errors (shown below each field)
   const [emailErr, setEmailErr]       = useState('');
   const [passwordErr, setPasswordErr] = useState('');
+  // Banner-level errors (shown above the form — for non-field issues)
   const [bannerErr, setBannerErr]     = useState('');
+  // Unverified email state
   const [unverified, setUnverified]   = useState(false);
   const [resendLoading, setResendLoading] = useState(false);
   const [resendSent, setResendSent]   = useState(false);
@@ -59,27 +62,48 @@ const LoginForm: React.FC<Props> = ({ onSwitch }) => {
     setUnverified(false); setResendSent(false);
   };
 
+  const handleEmailChange = (val: string) => {
+    setEmail(val);
+    setEmailErr('');
+    setBannerErr('');
+  };
+
+  const handleEmailBlur = () => {
+    if (email.trim() && !isValidEmailFormat(email.trim().toLowerCase())) {
+      setEmailErr('Enter a valid email address.');
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     clearErrors();
+
+    // Client-side pre-checks
     if (!email.trim()) { setEmailErr('Please enter your email address.'); return; }
-    if (!password)     { setPasswordErr('Please enter your password.'); return; }
+    if (!isValidEmailFormat(email.trim().toLowerCase())) {
+      setEmailErr('Enter a valid email address.');
+      return;
+    }
+    if (!password) { setPasswordErr('Please enter your password.'); return; }
 
     setLoading(true);
     try {
       await login(email.trim().toLowerCase(), password);
     } catch (err: any) {
       const code: string = err instanceof AuthError ? err.code : (err?.code ?? '');
+
       if (code === 'auth/invalid-email-format' || code === 'auth/invalid-email') {
-        setEmailErr('Please enter a valid email address.');
+        // Field-level — below email input
+        setEmailErr('Enter a valid email address.');
       } else if (code === 'auth/user-not-found') {
-        setEmailErr('No account found with this email address.');
+        // Field-level — below email input
+        setEmailErr('Account not found.');
       } else if (code === 'auth/wrong-password') {
-        setPasswordErr('Incorrect password. Please try again.');
+        // Field-level — below password input
+        setPasswordErr('Incorrect password.');
       } else if (code === 'auth/ambiguous-credentials') {
-        // Email Enumeration Protection is ON in Firebase Console.
-        // Go to: Authentication → Settings → User actions → disable it
-        // to get separate "wrong email" vs "wrong password" messages.
+        // Fallback when Email Enumeration Protection is ON (should not fire now)
+        // Show as banner since we can't tell which field is wrong
         setBannerErr('Incorrect email or password. Please check your details.');
       } else if (code === 'auth/email-not-verified') {
         setUnverified(true);
@@ -97,7 +121,10 @@ const LoginForm: React.FC<Props> = ({ onSwitch }) => {
   };
 
   const handleResend = async () => {
-    if (!email.trim() || !password) { setBannerErr('Enter your email and password first.'); return; }
+    if (!email.trim() || !password) {
+      setBannerErr('Enter your email and password first.');
+      return;
+    }
     setResendLoading(true);
     try {
       const cred = await signInWithEmailAndPassword(auth, email.trim().toLowerCase(), password);
@@ -125,10 +152,15 @@ const LoginForm: React.FC<Props> = ({ onSwitch }) => {
             <span>{resendSent ? 'Verification email sent! Check your inbox, then sign in.' : bannerErr}</span>
             {unverified && !resendSent && (
               <div style={{ marginTop: 8 }}>
-                <button type="button" disabled={resendLoading} onClick={handleResend}
-                  style={{ background: 'none', border: '1px solid currentColor', borderRadius: 6,
+                <button
+                  type="button"
+                  disabled={resendLoading}
+                  onClick={handleResend}
+                  style={{
+                    background: 'none', border: '1px solid currentColor', borderRadius: 6,
                     padding: '3px 10px', fontSize: 11.5, cursor: resendLoading ? 'not-allowed' : 'pointer',
-                    color: 'inherit', fontFamily: 'inherit', opacity: resendLoading ? 0.6 : 1 }}>
+                    color: 'inherit', fontFamily: 'inherit', opacity: resendLoading ? 0.6 : 1,
+                  }}>
                   {resendLoading ? 'Sending…' : 'Resend verification email'}
                 </button>
               </div>
@@ -138,26 +170,40 @@ const LoginForm: React.FC<Props> = ({ onSwitch }) => {
       )}
 
       <form onSubmit={handleSubmit} noValidate>
+        {/* Email */}
         <div className="field">
           <label className="field-label">Email address</label>
           <div className="input-wrap">
             <span className="input-icon"><MailIcon /></span>
-            <input type="email" className={`field-input ${emailErr ? 'error' : ''}`}
-              placeholder="you@example.com" value={email}
-              onChange={e => { setEmail(e.target.value); setEmailErr(''); }}
-              autoComplete="email" disabled={loading} autoFocus />
+            <input
+              type="email"
+              className={`field-input ${emailErr ? 'error' : ''}`}
+              placeholder="you@example.com"
+              value={email}
+              onChange={e => handleEmailChange(e.target.value)}
+              onBlur={handleEmailBlur}
+              autoComplete="email"
+              disabled={loading}
+              autoFocus
+            />
           </div>
           {emailErr && <div className="field-error"><XIcon />{emailErr}</div>}
         </div>
 
+        {/* Password */}
         <div className="field">
           <label className="field-label">Password</label>
           <div className="input-wrap">
             <span className="input-icon"><LockIcon /></span>
-            <input type={showPw ? 'text' : 'password'} className={`field-input ${passwordErr ? 'error' : ''}`}
-              placeholder="Your password" value={password}
+            <input
+              type={showPw ? 'text' : 'password'}
+              className={`field-input ${passwordErr ? 'error' : ''}`}
+              placeholder="Your password"
+              value={password}
               onChange={e => { setPassword(e.target.value); setPasswordErr(''); }}
-              autoComplete="current-password" disabled={loading} />
+              autoComplete="current-password"
+              disabled={loading}
+            />
             <button type="button" className="eye-btn" onClick={() => setShowPw(p => !p)} tabIndex={-1}>
               <EyeIcon open={showPw} />
             </button>
@@ -171,7 +217,9 @@ const LoginForm: React.FC<Props> = ({ onSwitch }) => {
           </button>
         </div>
 
-        <button type="submit" className="submit-btn"
+        <button
+          type="submit"
+          className="submit-btn"
           disabled={loading || !email.trim() || !password}>
           {loading ? <><span className="spinner" />Signing in…</> : 'Sign in'}
         </button>
