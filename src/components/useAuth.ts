@@ -11,14 +11,22 @@ import { auth, db } from "../config/firebase";
 export const SITE_URL = "https://myfittrackr.vercel.app";
 
 // ─── Email format validator ───────────────────────────────────────────────────
+
+// Well-known consumer providers — domain must match EXACTLY.
+const _FIXED_DOMAINS = ["gmail.com", "hotmail.com", "yahoo.com", "outlook.com"];
+const _FIXED_BRAND_PATTERNS = [/gmail/, /hotmail/, /yahoo/, /outlook/];
+
 export const isValidEmailFormat = (email: string): boolean => {
   const trimmed = email.trim().toLowerCase();
 
+  const atParts = trimmed.split("@");
+  if (atParts.length !== 2) return false;
+
+  const [local, domain] = atParts;
+  if (!local || !domain) return false;
+
   const re = /^[a-zA-Z0-9_%+\-]+(\.[a-zA-Z0-9_%+\-]+)*@[a-zA-Z0-9\-]+(\.[a-zA-Z0-9\-]+)*\.[a-zA-Z]{2,}$/;
   if (!re.test(trimmed)) return false;
-
-  const [local, domain] = trimmed.split("@");
-  if (!local || !domain) return false;
 
   if (trimmed.includes("..")) return false;
   if (local.startsWith(".") || local.endsWith(".")) return false;
@@ -28,6 +36,10 @@ export const isValidEmailFormat = (email: string): boolean => {
 
   const tld = domain.split(".").pop() ?? "";
   if (!/^[a-zA-Z]{2,}$/.test(tld)) return false;
+
+  // If domain looks like a known provider brand but isn't an exact match → invalid
+  const looksLikeFixedBrand = _FIXED_BRAND_PATTERNS.some(p => p.test(domain));
+  if (looksLikeFixedBrand && !_FIXED_DOMAINS.includes(domain)) return false;
 
   const blocked = [
     "mailinator.com","guerrillamail.com","tempmail.com","throwaway.email",
